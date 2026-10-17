@@ -1,0 +1,118 @@
+name: Build unsigned IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ipad-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check body protocol JSON
+        run: |
+          swiftc KairoBody/BodyProtocol.swift tests/BodyProtocolContractTests.swift -o /tmp/kairo-body-contract-tests
+          /tmp/kairo-body-contract-tests
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate
+      - name: Verify camera JPEG dimensions on iPad simulator
+        run: |
+          simulator_id=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; devices=json.load(sys.stdin)["devices"]; print(next(d["udid"] for group in devices.values() for d in group if d["name"].startswith("iPad") and d["state"] == "Shutdown"))')
+          xcodebuild test \
+            -project KairoBody.xcodeproj \
+            -scheme KairoBody \
+            -destination "platform=iOS Simulator,id=$simulator_id" \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO
+      - name: Capture iPad body visual smoke screenshot
+        run: |
+          simulator_id=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; devices=[d for group in json.load(sys.stdin)["devices"].values() for d in group if d["name"].startswith("iPad")]; print(next((d["udid"] for d in devices if d["state"] == "Booted"), devices[0]["udid"]))')
+          if ! xcrun simctl list devices | grep -q "$simulator_id (Booted)"; then xcrun simctl boot "$simulator_id"; fi
+          xcrun simctl bootstatus "$simulator_id" -b
+          xcrun simctl install "$simulator_id" "build/Build/Products/Debug-iphonesimulator/Kairo Body.app"
+          xcrun simctl io "$simulator_id" recordVideo --codec=h264 KairoBody-opening.mp4 &
+          recorder=$!
+          sleep 0.5
+          xcrun simctl launch "$simulator_id" icu.kairo.body
+          sleep 0.5
+          xcrun simctl io "$simulator_id" screenshot KairoBody-opening.png
+          sleep 3.5
+          xcrun simctl io "$simulator_id" screenshot KairoBody-simulator.png
+          kill -INT "$recorder"
+          wait "$recorder" || true
+          xcrun simctl terminate "$simulator_id" icu.kairo.body
+          xcrun simctl io "$simulator_id" recordVideo --codec=h264 KairoBody-plasma.mp4 &
+          recorder=$!
+          sleep 0.5
+          xcrun simctl launch "$simulator_id" icu.kairo.body --preview-plasma
+          sleep 3
+          xcrun simctl io "$simulator_id" screenshot KairoBody-plasma.png
+          kill -INT "$recorder"
+          wait "$recorder" || true
+      - name: Upload visual smoke screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: KairoBody-simulator-preview
+          path: |
+            KairoBody-opening.png
+            KairoBody-simulator.png
+            KairoBody-opening.mp4
+            KairoBody-plasma.png
+            KairoBody-plasma.mp4
+          if-no-files-found: error
+          retention-days: 7
+      - name: Build unsigned device app
+        run: |
+          xcodebuild \
+            -project KairoBody.xcodeproj \
+            -scheme KairoBody \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            clean build
+      - name: Package IPA
+        run: |
+          mkdir -p Payload
+          cp -R "build/Build/Products/Release-iphoneos/Kairo Body.app" Payload/
+          zip -qry KairoBody.ipa Payload
+      - name: Check packaged iPad permissions and version
+        run: |
+          python3 - <<'PY'
+          import plistlib
+          from zipfile import ZipFile
+          with ZipFile('KairoBody.ipa') as archive:
+              info = plistlib.loads(archive.read('Payload/Kairo Body.app/Info.plist'))
+          assert info['CFBundleVersion'] == '37'
+          assert info['CFBundleShortVersionString'] == '1.0.35'
+          assert info['CFBundleIcons']['CFBundlePrimaryIcon']['CFBundleIconFiles']
+          assert 'Payload/Kairo Body.app/Assets.car' in archive.namelist()
+          assert info['NSCameraUsageDescription']
+          assert info['NSMicrophoneUsageDescription']
+          assert info['NSSpeechRecognitionUsageDescription']
+          assert info['NSLocationWhenInUseUsageDescription']
+          assert info['NSLocalNetworkUsageDescription']
+          assert info['UIDeviceFamily'] == [2]
+          PY
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: KairoBody-unsigned-ipa
+          path: KairoBody.ipa
+          if-no-files-found: error
+          retention-days: 7
