@@ -60,8 +60,8 @@ private struct SettingsForm: View {
         Section("Voice") {
             Toggle("Wake on “Kairo”", isOn: $settings.voiceWakeEnabled)
             Text(voice.status).font(.caption).foregroundStyle(.secondary)
-            if let heard = voice.lastCommand, !heard.isEmpty {
-                Text("Last heard: \(heard)").font(.caption).foregroundStyle(.secondary)
+            if !voice.lastCommand.isEmpty {
+                Text("Last heard: \(voice.lastCommand)").font(.caption).foregroundStyle(.secondary)
                 Button("Clear") { voice.clearTranscript() }
                     .font(.caption)
             }
