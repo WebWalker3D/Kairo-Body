@@ -3,13 +3,20 @@ import SwiftUI
 @main
 struct KairoBodyApp: App {
     @StateObject private var model = AppModel()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
-            BodyView(client: model.client, conversation: model.conversation,
-                     voice: model.voice, echoConversation: model.echoConversation, echoPlayback: model.echoPlayback)
+            RootShellView()
                 .environmentObject(model)
                 .preferredColorScheme(.dark)
+                .task {
+                    model.wireVoiceCallbacks()
+                    model.connectIfNeeded()
+                }
+                .onChange(of: scenePhase) { _, phase in
+                    model.setForeground(phase == .active)
+                }
         }
     }
 }

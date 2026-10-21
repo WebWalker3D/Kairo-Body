@@ -9,6 +9,7 @@ import AVFoundation
 final class SensorManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published private(set) var liveSummary = "Sensors stopped"
     var onSignificantMovement: (() -> Void)?
+    var onPermissionsChanged: (() -> Void)?
 
     private let motion = CMMotionManager()
     private let altimeter = CMAltimeter()
@@ -105,12 +106,12 @@ final class SensorManager: NSObject, ObservableObject, CLLocationManagerDelegate
             let rotation = sample.rotationRate
             let rotationMagnitude = sqrt(rotation.x * rotation.x + rotation.y * rotation.y + rotation.z * rotation.z)
             if magnitude >= 0.06 || rotationMagnitude >= 0.20 {
-                self.onSignificantMovement?()
+                Task { @MainActor in self.onSignificantMovement?() }
             }
             self.peakAcceleration = max(self.peakAcceleration, magnitude)
             self.latestUserAcceleration = a
             self.latestGravity = sample.gravity
-            self.latestRotationRate = sample.rotationRate
+            self.latestRotationRate = rotation
             if magneticNorth {
                 let accuracy: String
                 switch sample.magneticField.accuracy {
@@ -158,7 +159,7 @@ final class SensorManager: NSObject, ObservableObject, CLLocationManagerDelegate
         pathMonitor.start(queue: pathQueue)
     }
 
-    var onPermissionsChanged: (() -> Void)?
+    var locationAuthorization: CLAuthorizationStatus { location.authorizationStatus }
 
     func capabilities(settings: AppSettings) -> BodyCapabilities {
         let locationPermission: String
@@ -184,7 +185,7 @@ final class SensorManager: NSObject, ObservableObject, CLLocationManagerDelegate
         let fix = settings.sendLocation ? latestLocation : nil
         return BodyCapabilities(frontCameraEnabled: settings.allowRemoteCamera,
             cameraPermission: cameraPermission, microphoneEnabled: settings.voiceWakeEnabled,
-            microphonePermission: microphonePermission, speechEnabled: !settings.agentToken.isEmpty,
+            microphonePermission: microphonePermission, speechEnabled: !AppConfig.agentToken.isEmpty,
             locationEnabled: settings.sendLocation, locationPermission: locationPermission,
             locationObservedAt: fix.map { BodyJSON.iso8601.string(from: $0.timestamp) },
             locationAccuracyM: fix.flatMap { $0.horizontalAccuracy >= 0 ? $0.horizontalAccuracy : nil },
@@ -219,8 +220,7 @@ final class SensorManager: NSObject, ObservableObject, CLLocationManagerDelegate
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let value = locations.last else { return }
-        guard locationEnabled else { return }
+        guard let value = locations.last, locationEnabled else { return }
         latestLocation = value
         locationObservedAt = value.timestamp
         locationAttention.receive(value)
@@ -233,6 +233,8 @@ final class SensorManager: NSObject, ObservableObject, CLLocationManagerDelegate
     func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
         latestHeading = newHeading
     }
+
+    // MARK: - Touch observation
 
     func resetTouches() {
         lock.lock()

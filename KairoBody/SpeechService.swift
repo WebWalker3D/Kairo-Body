@@ -1,14 +1,14 @@
 import Foundation
 import AVFoundation
 
-/// Plays Kairo's server-selected voice. The authenticated Agent API owns the voice profile.
+/// Plays Kairo's server-selected voice. The authenticated Agent API owns the
+/// voice profile; synthesis is chunked so playback starts before the whole
+/// answer exists, the way the Dot hears it.
 @MainActor
 final class SpeechService {
     var onPlaybackStateChange: ((Bool) -> Void)?
     var onAvailabilityChange: (() -> Void)?
-    private let settings: AppSettings
-    private let session: URLSession
-    private let agentToken: () -> String
+    private let http: KairoHTTP
     private var speechTask: Task<Void, Never>?
     private var pendingAudio: Task<Data, Error>?
     private var player: AVAudioPlayer?
@@ -17,23 +17,20 @@ final class SpeechService {
     private var completionDeadline: Task<Void, Never>?
     var isBusy: Bool { speechTask != nil }
 
-
-    init(settings: AppSettings, session: URLSession = .shared,
-         agentToken: (() -> String)? = nil) {
-        self.settings = settings
-        self.session = session
-        self.agentToken = agentToken ?? { settings.agentToken }
+    init(http: KairoHTTP = KairoHTTP()) {
+        self.http = http
     }
 
     @discardableResult
-    func speak(_ text: String, onEvent: ((ActionPhase, String) -> Void)? = nil, onFailure: ((String) -> Void)? = nil) -> Bool {
+    func speak(_ text: String, onEvent: ((ActionPhase, String) -> Void)? = nil,
+               onFailure: ((String) -> Void)? = nil) -> Bool {
         guard !isBusy else {
             onFailure?("Kairo's voice is busy. Stop playback before starting another utterance.")
             return false
         }
         let portions = Self.chunks(text)
-        guard !portions.isEmpty, !agentToken().isEmpty else {
-            onFailure?("Kairo's voice needs the Agent token in Settings.")
+        guard !portions.isEmpty, !AppConfig.agentToken.isEmpty else {
+            onFailure?("This copy of Kairo was not provisioned with a voice credential.")
             return false
         }
         completion = onEvent
@@ -61,7 +58,7 @@ final class SpeechService {
                 try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio,
                                                                  options: [.duckOthers])
                 try AVAudioSession.sharedInstance().setActive(true)
-                self.pendingAudio = Task { try await self.fetchChunk(portions[0]) }
+                self.pendingAudio = Task { try await self.synthesize(portions[0]) }
                 for index in portions.indices {
                     try Task.checkCancellation()
                     guard let pending = self.pendingAudio else { throw CancellationError() }
@@ -69,7 +66,7 @@ final class SpeechService {
                     try Task.checkCancellation()
                     guard runGeneration == self.generation else { throw CancellationError() }
                     self.pendingAudio = index + 1 < portions.count
-                        ? Task { try await self.fetchChunk(portions[index + 1]) }
+                        ? Task { try await self.synthesize(portions[index + 1]) }
                         : nil
                     let current = try AVAudioPlayer(data: audio)
                     let outcome = AudioPlaybackOutcome()
@@ -113,32 +110,11 @@ final class SpeechService {
         onAvailabilityChange?()
     }
 
-    func fetchChunk(_ text: String) async throws -> Data {
-        guard let base = URL(string: settings.agentURL), base.scheme == "https",
-              base.host == "connect.kairo.icu", base.user == nil,
-              base.password == nil, base.path.isEmpty || base.path == "/" else {
-            throw VoiceError.invalidEndpoint
-        }
-        let token = agentToken()
-        guard !token.isEmpty else { throw VoiceError.missingCredential }
+    func synthesize(_ text: String) async throws -> Data {
         guard !text.isEmpty && text.count <= 700 else { throw VoiceError.invalidText }
-        var url = base
-        url.appendPathComponent("api")
-        url.appendPathComponent("speech")
-        url.appendPathComponent("synthesis")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["text": text])
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("audio/wav", forHTTPHeaderField: "Accept")
-        request.timeoutInterval = 90
-        let (audio, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw VoiceError.serverRejected
-        }
-        guard audio.count <= 4 * 1024 * 1024,
-              audio.starts(with: Data("RIFF".utf8)),
+        let audio = try await http.agentRaw("api/speech/synthesis", method: "POST",
+            body: ["text": text], accept: "audio/wav")
+        guard audio.starts(with: Data("RIFF".utf8)),
               audio.dropFirst(8).starts(with: Data("WAVE".utf8)) else {
             throw VoiceError.invalidAudio
         }
@@ -194,14 +170,11 @@ final class SpeechService {
 }
 
 private enum VoiceError: LocalizedError {
-    case invalidEndpoint, missingCredential, invalidText, serverRejected, invalidAudio, playbackFailed
+    case invalidText, invalidAudio, playbackFailed
 
     var errorDescription: String? {
         switch self {
-        case .invalidEndpoint: return "Use https://connect.kairo.icu as the Agent URL."
-        case .missingCredential: return "Kairo's voice needs the Agent token in Settings."
         case .invalidText: return "Kairo's voice received invalid text."
-        case .serverRejected: return "Kairo's voice service rejected the request."
         case .invalidAudio: return "Kairo's voice service returned invalid audio."
         case .playbackFailed: return "The iPad could not play Kairo's voice."
         }

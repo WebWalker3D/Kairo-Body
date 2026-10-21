@@ -3,6 +3,10 @@ import Combine
 
 enum VisualSource: String { case frontCamera, selectedImage }
 
+/// One image this person has explicitly chosen to discuss with Kairo. The
+/// server's vision observation replaces the pixels: only the returned
+/// description attachment id travels with later questions, so the shared
+/// conversation (Dot included) can reference what the iPad showed.
 @MainActor
 final class SharedVisualContext: ObservableObject {
     @Published private(set) var attachmentID: String?
@@ -11,7 +15,6 @@ final class SharedVisualContext: ObservableObject {
     @Published private(set) var observedAt: Date?
     @Published private(set) var sessionID: String?
     @Published var previewJPEG: Data?
-    @Published var question = ""
     @Published private(set) var error: String?
     private(set) var generation = UUID()
 

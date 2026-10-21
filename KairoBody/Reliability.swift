@@ -117,7 +117,7 @@ private final class ResumeOnce: @unchecked Sendable {
     }
 }
 
-/// Identity of the one live body transport. Callbacks carry the ID they were
+/// Identity of the one live transport. Callbacks carry the ID they were
 /// started with, so a late error from a replaced socket cannot tear down its
 /// replacement, and one socket's failures schedule exactly one reconnect.
 struct TransportGate {
@@ -145,5 +145,30 @@ struct TransportGate {
     mutating func stop() {
         current = nil
         reconnectPending = false
+    }
+}
+
+enum BodyJSON {
+    static let encoder: JSONEncoder = {
+        let e = JSONEncoder()
+        e.outputFormatting = [.withoutEscapingSlashes]
+        return e
+    }()
+
+    static let iso8601: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
+    static func now() -> String { iso8601.string(from: Date()) }
+
+    static func date(_ value: Any?) -> Date? {
+        guard let text = value as? String else { return nil }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let parsed = formatter.date(from: text) { return parsed }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: text)
     }
 }

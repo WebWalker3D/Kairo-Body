@@ -31,7 +31,8 @@ private final class SpeechBufferRelay {
     }
 }
 
-/// Foreground wake phrase capture. Only recognized text is sent to Kairo's existing conversation.
+/// Foreground wake-phrase capture. Only recognized text is sent to Kairo's
+/// existing conversation; raw audio never leaves the device.
 @MainActor
 final class VoiceInputService: ObservableObject {
     @Published private(set) var status = "Voice wake off"

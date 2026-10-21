@@ -20,60 +20,68 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Check body protocol JSON
+      - name: Refuse personal provisioning in public builds
         run: |
-          swiftc KairoBody/BodyProtocol.swift tests/BodyProtocolContractTests.swift -o /tmp/kairo-body-contract-tests
-          /tmp/kairo-body-contract-tests
+          python3 - <<'PY'
+          import re, sys
+          from pathlib import Path
+          # Public CI must never carry credentials or personal session ids,
+          # in the tree or in what XcodeGen would bake into Info.plist.
+          problems = []
+          project = Path("project.yml").read_text()
+          for key in ("KairoSensoryToken", "KairoAgentToken", "KairoEchoSessionID"):
+              match = re.search(rf"^\s*{key}: \"(.*?)\"\s*$", project, re.MULTILINE)
+              if match and match.group(1):
+                  problems.append(f"{key} carries a value in the public tree")
+          if re.search(r"session_[0-9a-f]{16,}", project):
+              problems.append("a session identifier appears in project.yml")
+          for swift in Path("KairoBody").glob("*.swift"):
+              text = swift.read_text()
+              for match in re.finditer(r"(kbp_|kbc_|kbr_|sess_)[A-Za-z0-9_-]{20,}", text):
+                  problems.append(f"{swift.name} appears to embed {match.group(0)[:12]}…")
+              if re.search(r"session_[0-9a-f]{24,}", text):
+                  problems.append(f"{swift.name} embeds a personal session id")
+          if problems:
+              print("\n".join(problems)); sys.exit(1)
+          print("Public-provisioning guard: clean")
+          PY
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate Xcode project
         run: xcodegen generate
-      - name: Verify camera JPEG dimensions on iPad simulator
+      - name: Run the full unit suite on an iPad simulator
         run: |
+          set -o pipefail
           simulator_id=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; devices=json.load(sys.stdin)["devices"]; print(next(d["udid"] for group in devices.values() for d in group if d["name"].startswith("iPad") and d["state"] == "Shutdown"))')
           xcodebuild test \
             -project KairoBody.xcodeproj \
             -scheme KairoBody \
             -destination "platform=iOS Simulator,id=$simulator_id" \
+            -only-testing:KairoBodyTests \
             -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO
-      - name: Capture iPad body visual smoke screenshot
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee /tmp/kairo-body-xctest.log
+      - name: Capture iPad body visual smoke screenshots
         run: |
           simulator_id=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; devices=[d for group in json.load(sys.stdin)["devices"].values() for d in group if d["name"].startswith("iPad")]; print(next((d["udid"] for d in devices if d["state"] == "Booted"), devices[0]["udid"]))')
           if ! xcrun simctl list devices | grep -q "$simulator_id (Booted)"; then xcrun simctl boot "$simulator_id"; fi
           xcrun simctl bootstatus "$simulator_id" -b
-          xcrun simctl install "$simulator_id" "build/Build/Products/Debug-iphonesimulator/Kairo Body.app"
-          xcrun simctl io "$simulator_id" recordVideo --codec=h264 KairoBody-opening.mp4 &
-          recorder=$!
-          sleep 0.5
+          xcrun simctl install "$simulator_id" "build/Build/Products/Debug-iphonesimulator/KairoBody.app"
           xcrun simctl launch "$simulator_id" icu.kairo.body
-          sleep 0.5
-          xcrun simctl io "$simulator_id" screenshot KairoBody-opening.png
-          sleep 3.5
-          xcrun simctl io "$simulator_id" screenshot KairoBody-simulator.png
-          kill -INT "$recorder"
-          wait "$recorder" || true
+          sleep 2
+          xcrun simctl io "$simulator_id" screenshot KairoBody-setup.png
+          xcrun simctl terminate "$simulator_id" icu.kairo.body || true
+          xcrun simctl launch "$simulator_id" icu.kairo.body
+          sleep 4
+          xcrun simctl io "$simulator_id" screenshot KairoBody-stage.png
           xcrun simctl terminate "$simulator_id" icu.kairo.body
-          xcrun simctl io "$simulator_id" recordVideo --codec=h264 KairoBody-plasma.mp4 &
-          recorder=$!
-          sleep 0.5
-          xcrun simctl launch "$simulator_id" icu.kairo.body --preview-plasma
-          sleep 3
-          xcrun simctl io "$simulator_id" screenshot KairoBody-plasma.png
-          kill -INT "$recorder"
-          wait "$recorder" || true
-      - name: Upload visual smoke screenshot
+      - name: Upload visual smoke screenshots
         uses: actions/upload-artifact@v4
         with:
           name: KairoBody-simulator-preview
           path: |
-            KairoBody-opening.png
-            KairoBody-simulator.png
-            KairoBody-opening.mp4
-            KairoBody-plasma.png
-            KairoBody-plasma.mp4
+            KairoBody-setup.png
+            KairoBody-stage.png
           if-no-files-found: error
-          retention-days: 7
       - name: Build unsigned device app
         run: |
           xcodebuild \
@@ -89,7 +97,7 @@ jobs:
       - name: Package IPA
         run: |
           mkdir -p Payload
-          cp -R "build/Build/Products/Release-iphoneos/Kairo Body.app" Payload/
+          cp -R build/Build/Products/Release-iphoneos/KairoBody.app Payload/
           zip -qry KairoBody.ipa Payload
       - name: Check packaged iPad permissions and version
         run: |
@@ -97,17 +105,23 @@ jobs:
           import plistlib
           from zipfile import ZipFile
           with ZipFile('KairoBody.ipa') as archive:
-              info = plistlib.loads(archive.read('Payload/Kairo Body.app/Info.plist'))
-          assert info['CFBundleVersion'] == '37'
-          assert info['CFBundleShortVersionString'] == '1.0.35'
+              info = plistlib.loads(archive.read('Payload/KairoBody.app/Info.plist'))
+          assert info['CFBundleIdentifier'] == 'icu.kairo.body'
+          assert info['CFBundleVersion'] == '50'
+          assert info['CFBundleShortVersionString'] == '2.0.0'
           assert info['CFBundleIcons']['CFBundlePrimaryIcon']['CFBundleIconFiles']
-          assert 'Payload/Kairo Body.app/Assets.car' in archive.namelist()
+          assert 'Payload/KairoBody.app/Assets.car' in archive.namelist()
           assert info['NSCameraUsageDescription']
           assert info['NSMicrophoneUsageDescription']
           assert info['NSSpeechRecognitionUsageDescription']
           assert info['NSLocationWhenInUseUsageDescription']
           assert info['NSLocalNetworkUsageDescription']
           assert info['UIDeviceFamily'] == [2]
+          # Public artifacts must carry no personal provisioning.
+          for key in ('KairoSensoryToken', 'KairoAgentToken', 'KairoEchoSessionID'):
+              assert not str(info.get(key) or '').strip(), f'{key} is baked into a public artifact'
+          print('Packaged', info['CFBundleIdentifier'], info['CFBundleShortVersionString'],
+                'build', info['CFBundleVersion'], '- no personal provisioning')
           PY
       - name: Upload IPA
         uses: actions/upload-artifact@v4
@@ -115,4 +129,3 @@ jobs:
           name: KairoBody-unsigned-ipa
           path: KairoBody.ipa
           if-no-files-found: error
-          retention-days: 7

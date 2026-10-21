@@ -19,11 +19,6 @@ final class LocationAttention {
     private var continuation: CheckedContinuation<LocationFrame, Error>?
     private var deadline: Task<Void, Never>?
     private var generation = UUID()
-
-    init(request: @escaping () -> Void, cancelRequest: @escaping () -> Void) {
-        self.request = request
-        self.cancelRequest = cancelRequest
-    }
     func refresh(timeout: Duration = .seconds(30)) async throws -> LocationFrame {
         guard continuation == nil else { throw Failure.busy }
         let run = UUID()
@@ -66,7 +61,8 @@ final class LocationAttention {
     }
 }
 
-/// A socket send proves delivery to the transport; only the server receipt proves ingestion.
+/// A socket send proves delivery to the transport; only the server receipt
+/// proves ingestion.
 @MainActor
 final class ObservationDelivery {
     enum Failure: LocalizedError, Equatable {
@@ -91,7 +87,10 @@ final class ObservationDelivery {
                 if Task.isCancelled { finish(sequence, .failure(Failure.cancelled)) }
             }
         } onCancel: {
-            Task { @MainActor [weak self] in self?.finish(sequence, .failure(Failure.cancelled)) }
+            Task { @MainActor [weak self] in
+                guard self?.pending[sequence] != nil else { return }
+                self?.finish(sequence, .failure(Failure.cancelled))
+            }
         }
     }
     func acknowledge(sequence: Int, observationID: String) {

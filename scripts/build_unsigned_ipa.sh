@@ -19,7 +19,7 @@ xcodebuild \
   CODE_SIGN_IDENTITY="" \
   clean build
 
-APP_PATH="build/Build/Products/Release-iphoneos/Kairo Body.app"
+APP_PATH="build/Build/Products/Release-iphoneos/KairoBody.app"
 if [[ ! -d "$APP_PATH" ]]; then
   echo "Built app not found at: $APP_PATH" >&2
   exit 1

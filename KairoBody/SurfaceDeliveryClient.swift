@@ -1,15 +1,17 @@
 import Foundation
 
-/// Executes one already-settled, atomically claimed answer. Never queues on reconnect.
+/// Executes one already-settled, atomically claimed answer on this iPad.
+/// Never queues on reconnect: an answer that left the foreground reports
+/// failure so Kairo can choose another surface honestly.
 @MainActor
 final class SurfaceDeliveryClient: ObservableObject {
     typealias Request = (String, [String: Any]?) async throws -> [String: Any]
     @Published private(set) var busy = false
     @Published private(set) var error: String?
+    var display: (String) -> Void = { _ in }
+    var speak: (String, @escaping (ActionPhase, String) -> Void) -> Bool = { _, _ in false }
+    var stopSpeech: () -> Void = {}
     private let request: Request
-    private let display: (String) -> Void
-    private let speak: (String, @escaping (ActionPhase, String) -> Void) -> Bool
-    private let stopSpeech: () -> Void
     private var seen = Set<String>()
     private var active: (job: String, target: String)?
     private var generation = UUID()
@@ -17,11 +19,8 @@ final class SurfaceDeliveryClient: ObservableObject {
     private var displayVisible = false
     private var presenceTask: Task<Void, Never>?
 
-    init(request: @escaping Request, display: @escaping (String) -> Void,
-         speak: @escaping (String, @escaping (ActionPhase, String) -> Void) -> Bool,
-         stopSpeech: @escaping () -> Void) {
-        self.request = request; self.display = display
-        self.speak = speak; self.stopSpeech = stopSpeech
+    init(request: @escaping Request) {
+        self.request = request
     }
 
     func setForeground(_ value: Bool) {
@@ -74,8 +73,7 @@ final class SurfaceDeliveryClient: ObservableObject {
             return
         }
         guard destination != "silent", ["ipad_display", "ipad_speech"].contains(destination),
-              !busy, !seen.contains(jobID), !jobID.isEmpty,
-              jobID.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_" || $0 == "-") }) else { return }
+              !busy, !seen.contains(jobID), !jobID.isEmpty, WireID.valid(jobID) else { return }
         busy = true; error = nil; seen.insert(jobID)
         let run = generation
         do {

@@ -2,6 +2,9 @@ import Foundation
 import AVFoundation
 import CoreVideo
 
+/// Appliance dimming: after a minute of stillness show the screensaver, after
+/// the chosen window go dark. Kairo's actual work — on any surface, including
+/// the Dot — keeps the display alive; a heartbeat alone never does.
 struct MotionDimmingPolicy {
     enum Stage: Equatable { case awake, screensaver, dark }
     let idleSeconds: TimeInterval
@@ -42,6 +45,8 @@ struct FrameMotionAnalyzer {
     }
 }
 
+/// Local-only front-camera motion presence. Frames are reduced to a 12×12
+/// luma grid on device; nothing ever leaves the iPad.
 final class FrontCameraMotionDetector: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     var onMovement: (() -> Void)?
     var onSessionChanged: ((AVCaptureSession?) -> Void)?
@@ -95,13 +100,13 @@ final class FrontCameraMotionDetector: NSObject, AVCaptureVideoDataOutputSampleB
 
     func stop() async {
         await withCheckedContinuation { continuation in
-          queue.async {
-            self.session?.stopRunning()
-            self.session = nil
-            self.analyzer = FrameMotionAnalyzer()
-            DispatchQueue.main.async { self.onSessionChanged?(nil) }
-            continuation.resume()
-          }
+            queue.async {
+                self.session?.stopRunning()
+                self.session = nil
+                self.analyzer = FrameMotionAnalyzer()
+                DispatchQueue.main.async { self.onSessionChanged?(nil) }
+                continuation.resume()
+            }
         }
     }
 

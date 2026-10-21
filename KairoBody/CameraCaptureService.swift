@@ -3,6 +3,9 @@ import AVFoundation
 import UIKit
 import CoreImage
 
+/// One-shot front-camera perception. The rear camera stays blocked by body
+/// policy. Images are resized to ≤1280 px and JPEG-compressed before transport;
+/// no video stream ever leaves the device.
 final class CameraCaptureService: NSObject {
     enum CameraError: LocalizedError, Equatable {
         case blockedByBody
@@ -31,8 +34,7 @@ final class CameraCaptureService: NSObject {
 
     func capture(position: AVCaptureDevice.Position) async throws -> (Data, Int, Int) {
         guard position == .front else { throw CameraError.blockedByBody }
-        let authorized = await ensureAuthorization()
-        guard authorized else { throw CameraError.denied }
+        guard await ensureAuthorization() else { throw CameraError.denied }
 
         return try await withCheckedThrowingContinuation { continuation in
             queue.async { [weak self] in
@@ -98,7 +100,7 @@ final class CameraCaptureService: NSObject {
 
     /// A one-shot front-camera video frame avoids the photo shutter sound on
     /// iPadOS 17. The session stops as soon as one exposure-settled frame is
-    /// encoded; no video stream leaves the device.
+    /// encoded.
     func captureQuietFront() async throws -> (Data, Int, Int) {
         guard await ensureAuthorization() else { throw CameraError.denied }
         return try await withCheckedThrowingContinuation { continuation in
@@ -231,7 +233,7 @@ private final class CaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
     }
 }
 
-private extension UIImage {
+extension UIImage {
     func kairoResized(maxDimension: CGFloat) -> UIImage {
         let largest = max(size.width, size.height)
         let scale = min(1, maxDimension / largest)

@@ -8,38 +8,42 @@ struct BodyInvitation {
     let expiresAt: Date
 }
 
+/// Kairo-authored conversation invitations for this iPad. Display requires
+/// local opt-in, visible/idle foreground, fresh paired proof and an actual
+/// Kairo source; every outcome (delivered/answered/dismissed/expired/cancelled)
+/// is reported so the server's cadence and quiet guards stay honest.
 @MainActor
 final class InvitationClient: ObservableObject {
-    typealias Request = (String, [String: Any]?) async throws -> [String: Any]
     @Published private(set) var invitation: BodyInvitation?
     @Published private(set) var canRespond = false
-    private let request: Request
+    private let http: KairoHTTP
     private var generation = UUID()
     private var refreshing = false
     private var expiryTask: Task<Void, Never>?
     private var displayed = Set<String>()
 
-    init(request: @escaping Request) { self.request = request }
+    init(http: KairoHTTP = KairoHTTP()) { self.http = http }
 
-    func refresh(sessionID: String, foreground: Bool) async {
-        guard foreground, !sessionID.isEmpty else { stop(); return }
+    func refresh(foreground: Bool) async {
+        guard foreground, !AppConfig.ownerProof.isEmpty else { stop(); return }
         guard !refreshing, invitation == nil else { return }
         let run = generation
         refreshing = true
         defer { if generation == run { refreshing = false } }
         do {
-            let response = try await request("api/ipad/invitations", nil)
+            let response = try await http.agentObject("api/ipad/invitations", timeout: 10)
             guard let proposal = response["invitation"] as? [String: Any],
                   let id = proposal["id"] as? String, !id.isEmpty, id.allSatisfy({ $0.isNumber && $0.isASCII }),
                   let text = proposal["text"] as? String, !text.isEmpty, text.count <= 500,
                   proposal["origin"] as? String == "kairo",
                   let source = proposal["source_event_id"] as? Int, source > 0,
                   let session = proposal["session_id"] as? String, !session.isEmpty,
-                  let timestamp = proposal["expires_at"] as? String, let expires = Self.date(timestamp) else { return }
+                  let timestamp = proposal["expires_at"] as? String, let expires = BodyJSON.date(timestamp) else { return }
             guard generation == run else { await outcome(id, "cancelled"); return }
             guard expires > Date() else { await outcome(id, "expired"); return }
             canRespond = false
-            invitation = BodyInvitation(id: id, text: text, sourceEventID: source, sourceSessionID: session, expiresAt: expires)
+            invitation = BodyInvitation(id: id, text: text, sourceEventID: source,
+                                        sourceSessionID: session, expiresAt: expires)
             expiryTask = Task { [weak self] in
                 do { try await Task.sleep(for: .seconds(max(0, expires.timeIntervalSinceNow))) } catch { return }
                 guard let self, self.generation == run, self.invitation?.id == id else { return }
@@ -69,6 +73,8 @@ final class InvitationClient: ObservableObject {
         await outcome(item.id, "dismissed")
     }
 
+    /// Returns the invitation's own text so the room can continue the source
+    /// conversation directly.
     func accept() async -> String? {
         guard canRespond, let item = invitation, item.expiresAt > Date() else { stop(); return nil }
         let run = generation
@@ -87,16 +93,9 @@ final class InvitationClient: ObservableObject {
     @discardableResult
     private func outcome(_ id: String, _ status: String) async -> Bool {
         do {
-            let response = try await request("api/ipad/invitations/\(id)/result", ["status": status])
+            let response = try await http.agentObject("api/ipad/invitations/\(id)/result",
+                                                      method: "POST", body: ["status": status], timeout: 10)
             return response["accepted"] as? Bool == true
         } catch { return false }
-    }
-
-    private static func date(_ value: String) -> Date? {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let parsed = formatter.date(from: value) { return parsed }
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: value)
     }
 }

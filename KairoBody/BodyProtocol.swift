@@ -43,25 +43,6 @@ struct LocationFrame: Codable {
     let courseDeg: Double?
     let headingDeg: Double?
     let observedAt: String?
-
-    private enum CodingKeys: String, CodingKey {
-        case enabled, available, latitude, longitude, horizontalAccuracyM
-        case altitudeM, speedMps, courseDeg, headingDeg, observedAt
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var fields = encoder.container(keyedBy: CodingKeys.self)
-        try fields.encode(enabled, forKey: .enabled)
-        try fields.encode(available, forKey: .available)
-        try fields.encode(latitude, forKey: .latitude)
-        try fields.encode(longitude, forKey: .longitude)
-        try fields.encode(horizontalAccuracyM, forKey: .horizontalAccuracyM)
-        try fields.encode(altitudeM, forKey: .altitudeM)
-        try fields.encode(speedMps, forKey: .speedMps)
-        try fields.encode(courseDeg, forKey: .courseDeg)
-        try fields.encode(headingDeg, forKey: .headingDeg)
-        try fields.encode(observedAt, forKey: .observedAt)
-    }
 }
 
 struct PressureFrame: Codable {
@@ -78,20 +59,6 @@ struct DeviceFrame: Codable {
     let network: String
     let orientation: String
     let screenBrightness: Double
-
-    private enum CodingKeys: String, CodingKey {
-        case observedAt, batteryLevel, batteryState, network, orientation, screenBrightness
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var fields = encoder.container(keyedBy: CodingKeys.self)
-        try fields.encode(observedAt, forKey: .observedAt)
-        try fields.encode(batteryLevel, forKey: .batteryLevel)
-        try fields.encode(batteryState, forKey: .batteryState)
-        try fields.encode(network, forKey: .network)
-        try fields.encode(orientation, forKey: .orientation)
-        try fields.encode(screenBrightness, forKey: .screenBrightness)
-    }
 }
 
 struct SensorFrame: Codable {
@@ -167,18 +134,14 @@ struct CommandResult: Codable {
     let detail: String
 }
 
-enum BodyJSON {
-    static let encoder: JSONEncoder = {
-        let e = JSONEncoder()
-        e.outputFormatting = [.withoutEscapingSlashes]
-        return e
-    }()
-
-    static let iso8601: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
-    }()
-
-    static func now() -> String { iso8601.string(from: Date()) }
+enum ContactIntent: String {
+    case tap, sustainedContact, drag, cancelled
+    static func classify(durationMs: Int, pathLength: Double, cancelled: Bool) -> ContactIntent {
+        if cancelled { return .cancelled }
+        if pathLength >= 0.01 { return .drag }
+        return durationMs >= 1000 ? .sustainedContact : .tap
+    }
+    static func shouldSubmit(isBodySurface: Bool, cancelled: Bool, conversationBusy: Bool) -> Bool {
+        isBodySurface && !cancelled && !conversationBusy
+    }
 }

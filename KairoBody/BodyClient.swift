@@ -2,6 +2,10 @@ import Foundation
 import UIKit
 import AVFoundation
 
+/// The `kairo-body/1` sensory endpoint client: one authenticated WebSocket to
+/// the memory service, bounded 17 s frames, capability negotiation, command
+/// execution with an action-event lifecycle, and ingestion receipts for
+/// camera and one-shot location observations.
 @MainActor
 final class BodyClient: ObservableObject {
     enum ConnectionState: String {
@@ -25,6 +29,8 @@ final class BodyClient: ObservableObject {
     @Published var display = DisplayState()
     @Published private(set) var screensaverActive = false
     @Published private(set) var frontCameraSession: AVCaptureSession?
+    @Published private(set) var capabilitiesConfirmedAt: Date?
+    @Published private(set) var serverEndpointID: String?
 
     private let settings: AppSettings
     private let sensors: SensorManager
@@ -63,8 +69,6 @@ final class BodyClient: ObservableObject {
     private var transportGeneration = UUID()
     private var capabilitySequence = 0
     private var permissionRevision = 0
-    @Published private(set) var capabilitiesConfirmedAt: Date?
-    @Published private(set) var serverEndpointID: String?
     private var lastCapabilityPermissions: String?
     private var capabilitySentAt: [Int: Date] = [:]
     private var acknowledgedCapabilitySequence = -1
@@ -72,7 +76,8 @@ final class BodyClient: ObservableObject {
 
     let sessionID = UUID().uuidString.lowercased()
 
-    init(settings: AppSettings, sensors: SensorManager, speech: SpeechService, camera: CameraCaptureService,
+    init(settings: AppSettings, sensors: SensorManager, speech: SpeechService,
+         camera: CameraCaptureService,
          makeSocket: @escaping (URLRequest) -> BodySocket = SessionBoundSocket.open,
          timing: BodyLinkTiming = BodyLinkTiming()) {
         self.makeSocket = makeSocket
@@ -94,8 +99,8 @@ final class BodyClient: ObservableObject {
 
     func start() {
         guard !shouldRun else { return }
-        guard let url = URL(string: settings.websocketURL), ["ws", "wss"].contains(url.scheme?.lowercased() ?? "") else {
-            lastError = "Enter a valid ws:// or wss:// endpoint in Settings."
+        guard URL(string: AppConfig.bodySocketURL) != nil, !AppConfig.sensoryToken.isEmpty else {
+            lastError = "This copy of Kairo was not provisioned with body credentials."
             connectionState = .error
             return
         }
@@ -206,10 +211,17 @@ final class BodyClient: ObservableObject {
             while let self, !Task.isCancelled, self.shouldRun {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
                 guard !Task.isCancelled, self.shouldRun, self.isForeground else { continue }
-                self.applyDimming(self.dimmingPolicy.observe(at: Date(), movement: self.responseActive))
+                self.applyDimming(self.dimmingPolicy.observe(at: Date(), movement: self.dimmingIsBusy()))
             }
         }
     }
+
+    /// The screensaver clock advances only on genuine quiet. Local work and
+    /// Kairo's actual activity on any surface (seen through AppModel) count as
+    /// movement; a bare heartbeat never does. The closure keeps this client
+    /// independent of the composition root.
+    var dimmingBusyProbe: () -> Bool = { false }
+    private func dimmingIsBusy() -> Bool { responseActive || dimmingBusyProbe() }
 
     func noteUserActivity() {
         guard shouldRun, settings.dimWhenStill, isForeground else { return }
@@ -314,7 +326,8 @@ final class BodyClient: ObservableObject {
               lastFrameSentAt.map({ Date().timeIntervalSince($0) >= 17 }) ?? true else { return }
         lastFrameSentAt = Date()
         sequence += 1
-        let frame = sensors.snapshot(bodyID: settings.bodyID, sessionID: sessionID, sequence: sequence, sendLocation: settings.sendLocation)
+        let frame = sensors.snapshot(bodyID: AppConfig.bodyID, sessionID: sessionID,
+                                     sequence: sequence, sendLocation: settings.sendLocation)
         if await sendCodable(frame) {
             lastSensorFrame = frame
             lastFrameAt = Date()
@@ -347,7 +360,7 @@ final class BodyClient: ObservableObject {
         do {
             let (jpeg, width, height) = try CameraCaptureService.prepare(image)
             _ = try await sendCameraFrame(jpeg: jpeg, width: width, height: height,
-                                  position: .front, commandID: nil)
+                                          position: .front, commandID: nil)
         } catch {
             lastError = error.localizedDescription
         }
@@ -355,8 +368,8 @@ final class BodyClient: ObservableObject {
 
     private func connect() {
         guard shouldRun else { return }
-        guard let url = URL(string: settings.websocketURL), ["ws", "wss"].contains(url.scheme?.lowercased() ?? "") else {
-            lastError = "Enter a valid ws:// or wss:// endpoint in Settings."
+        guard let url = URL(string: AppConfig.bodySocketURL) else {
+            lastError = "The Kairo body endpoint is invalid."
             connectionState = .error
             return
         }
@@ -367,8 +380,8 @@ final class BodyClient: ObservableObject {
         connectionState = reconnectAttempt == 0 ? .connecting : .reconnecting
         var request = URLRequest(url: url)
         request.timeoutInterval = 15
-        if !settings.bearerToken.isEmpty {
-            request.setValue("Bearer \(settings.bearerToken)", forHTTPHeaderField: "Authorization")
+        if !AppConfig.sensoryToken.isEmpty {
+            request.setValue("Bearer \(AppConfig.sensoryToken)", forHTTPHeaderField: "Authorization")
         }
 
         let socket = makeSocket(request)
@@ -404,7 +417,7 @@ final class BodyClient: ObservableObject {
             self.reconnectAttempt = 0
             self.startLiveness(socket, transport: transport)
             await self.sendHello()
-            await self.sendCodable(DisplayStateRequest(bodyID: self.settings.bodyID,
+            await self.sendCodable(DisplayStateRequest(bodyID: AppConfig.bodyID,
                                                        sessionID: self.sessionID))
             await self.sendSensorFrame()
             self.startFrameLoop()
@@ -475,12 +488,13 @@ final class BodyClient: ObservableObject {
     }
 
     private func sendHello() async {
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "2.0"
         let hello = HelloFrame(
-            bodyID: settings.bodyID,
+            bodyID: AppConfig.bodyID,
             sessionID: sessionID,
             appVersion: version,
-            capabilities: ["motion", "pressure", "battery", "network", "touch", "location_opt_in", "camera_opt_in", "speak", "display", "body_capabilities_v1", "body_action_events_v1"]
+            capabilities: ["motion", "pressure", "battery", "network", "touch", "location_opt_in",
+                           "camera_opt_in", "speak", "display", "body_capabilities_v1", "body_action_events_v1"]
         )
         await sendCodable(hello)
     }
@@ -516,9 +530,10 @@ final class BodyClient: ObservableObject {
         facts.permissionRevision = permissionRevision
         capabilitySequence += 1
         let seq = capabilitySequence
-        let message = facts.makeMessage(sequence: seq, bodyID: settings.bodyID, sessionID: sessionID, foreground: isForeground)
+        let message = facts.makeMessage(sequence: seq, bodyID: AppConfig.bodyID,
+                                        sessionID: sessionID, foreground: isForeground)
         do {
-            let data = try JSONSerialization.data(withJSONObject: message)
+            let data = try JSONSerialization.data(withJSONObject: message, options: [.sortedKeys])
             capabilitySentAt = capabilitySentAt.filter { Date().timeIntervalSince($0.value) < 45 }
             capabilitySentAt[seq] = Date()
             try await socket.send(.data(data))
@@ -527,7 +542,7 @@ final class BodyClient: ObservableObject {
 
     private func handleIncoming(_ data: Data) async {
         if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           object["bodyID"] as? String == settings.bodyID, object["sessionID"] as? String == sessionID {
+           object["bodyID"] as? String == AppConfig.bodyID, object["sessionID"] as? String == sessionID {
             if object["type"] as? String == "hello_ack",
                object["protocolVersion"] as? String == "kairo-body/1",
                (object["capabilities"] as? [String])?.contains("body_capabilities_v1") == true {
@@ -553,7 +568,7 @@ final class BodyClient: ObservableObject {
         }
 
         if let snapshot = try? JSONDecoder().decode(DisplayStateSnapshot.self, from: data),
-           snapshot.isValid(bodyID: settings.bodyID, sessionID: sessionID) {
+           snapshot.isValid(bodyID: AppConfig.bodyID, sessionID: sessionID) {
             if !receivedDisplayCommandOnTransport {
                 display = DisplayState(state: snapshot.state,
                                        headline: snapshot.headline,
@@ -657,7 +672,7 @@ final class BodyClient: ObservableObject {
                           self.transportGeneration == run else { throw ObservationDelivery.Failure.cancelled }
                     self.lastFrameSentAt = Date()
                     self.sequence += 1
-                    var frame = self.sensors.snapshot(bodyID: self.settings.bodyID, sessionID: self.sessionID,
+                    var frame = self.sensors.snapshot(bodyID: AppConfig.bodyID, sessionID: self.sessionID,
                         sequence: self.sequence, sendLocation: true)
                     frame.location = fix
                     let observation = try await self.observationDelivery.deliver(sequence: frame.sequence, timeout: .seconds(10)) {
@@ -698,7 +713,7 @@ final class BodyClient: ObservableObject {
             try Task.checkCancellation()
             guard isForeground, settings.allowRemoteCamera, transportGeneration == run else { throw ObservationDelivery.Failure.cancelled }
             let observation = try await sendCameraFrame(jpeg: jpeg, width: width, height: height,
-                                  position: position, commandID: commandID)
+                                          position: position, commandID: commandID)
             if let commandID { await commandResult(id: commandID, ok: true, detail: "Camera observation ingested: \(observation)") }
         } catch {
             lastError = error.localizedDescription
@@ -711,7 +726,7 @@ final class BodyClient: ObservableObject {
         guard position == .front, isForeground, capabilitiesNegotiated else { throw ObservationDelivery.Failure.sendFailed }
         sequence += 1
         let frame = CameraFrame(
-            bodyID: settings.bodyID,
+            bodyID: AppConfig.bodyID,
             sessionID: sessionID,
             commandID: commandID,
             sequence: sequence,
@@ -730,10 +745,11 @@ final class BodyClient: ObservableObject {
     private func sendActionEvent(_ event: BodyActionEvent) async {
         guard actionEventsNegotiated, let socket, let transport = gate.current else { return }
         let message: [String: Any] = ["type": "action_event", "protocolVersion": "kairo-body/1",
-            "bodyID": settings.bodyID, "sessionID": sessionID, "commandID": event.commandID,
+            "bodyID": AppConfig.bodyID, "sessionID": sessionID, "commandID": event.commandID,
             "sequence": event.sequence, "phase": event.phase.rawValue, "detail": event.detail]
-        do { try await socket.send(.data(JSONSerialization.data(withJSONObject: message))) }
-        catch { handleDisconnect(error, transport: transport) }
+        do {
+            try await socket.send(.data(JSONSerialization.data(withJSONObject: message, options: [.sortedKeys])))
+        } catch { handleDisconnect(error, transport: transport) }
     }
 
     private func actionEvent(id: String, phase: ActionPhase, detail: String) async {
@@ -747,7 +763,7 @@ final class BodyClient: ObservableObject {
             await actionEvent(id: id, phase: ok ? .completed : .failed, detail: detail)
             return
         }
-        await sendCodable(CommandResult(bodyID: settings.bodyID, sessionID: sessionID, commandID: id, ok: ok, detail: detail))
+        await sendCodable(CommandResult(bodyID: AppConfig.bodyID, sessionID: sessionID, commandID: id, ok: ok, detail: detail))
     }
 }
 
