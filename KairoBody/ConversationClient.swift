@@ -268,10 +268,7 @@ final class ConversationClient: ObservableObject {
     }
 
     private func conversationSessionID(generation requestGeneration: Int) async throws -> String {
-        if settings.followEcho {
-            guard let id = EchoBinding.sessionID(EchoBinding.configuredSessionID) else {
-                throw ConversationError.jobFailed("This copy of Kairo has no shared conversation id baked in.")
-            }
+        if settings.followEcho, let id = EchoBinding.sessionID(EchoBinding.configuredSessionID) {
             let shared = try await http.agentObject("api/sessions/\(id)")
             guard requestGeneration == generation else { throw CancellationError() }
             guard shared["id"] as? String == id, shared["status"] as? String == "active" else {
@@ -279,6 +276,9 @@ final class ConversationClient: ObservableObject {
             }
             return id
         }
+        // Following Echo without a configured session (fresh install, or the
+        // owner has not linked one yet) falls back to this iPad's own
+        // conversation rather than dead-ending the composer.
         if WireID.valid(settings.sharedSessionID) { return settings.sharedSessionID }
         let workspaces = try await http.agentArray("api/workspaces")
         guard requestGeneration == generation else { throw CancellationError() }

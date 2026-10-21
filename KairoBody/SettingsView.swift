@@ -89,7 +89,7 @@ struct SettingsView: View {
             return "Off: this iPad keeps its own separate conversation."
         }
         return EchoBinding.configuredSessionID.isEmpty
-            ? "On — but this build has no shared Echo session baked in."
+            ? "On — no shared Echo session is configured yet, so this iPad holds its own conversation until one is set under Credential setup."
             : "On: this iPad speaks inside the Dot's own conversation. Kairo's replies stay quiet here unless you choose “Speak here”."
     }
 
