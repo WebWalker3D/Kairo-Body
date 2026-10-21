@@ -132,8 +132,9 @@ final class JobPipelineTests: XCTestCase {
     }
 
     func testPendingTurnStoreSurvivesRelaunchAndIgnoresCorruption() throws {
-        let suite = UserDefaults(suiteName: "JobPipelineTests.\(UUID().uuidString)")!
-        defer { suite.removePersistentDomain(forName: suite.suiteName ?? "") }
+        let suiteName = "JobPipelineTests.\(UUID().uuidString)"
+        let suite = UserDefaults(suiteName: suiteName)!
+        defer { suite.removePersistentDomain(forName: suiteName) }
         let store = PendingTurnStore(defaults: suite)
         var turn = turn(at: Date(timeIntervalSince1970: 1_500_000))
         store.save(turn)
