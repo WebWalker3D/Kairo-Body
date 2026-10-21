@@ -19,6 +19,11 @@ final class LocationAttention {
     private var continuation: CheckedContinuation<LocationFrame, Error>?
     private var deadline: Task<Void, Never>?
     private var generation = UUID()
+
+    init(request: @escaping () -> Void, cancelRequest: @escaping () -> Void) {
+        self.request = request
+        self.cancelRequest = cancelRequest
+    }
     func refresh(timeout: Duration = .seconds(30)) async throws -> LocationFrame {
         guard continuation == nil else { throw Failure.busy }
         let run = UUID()

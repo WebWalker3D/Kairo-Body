@@ -5,7 +5,7 @@ import UIKit
 
 /// The composition root. It owns every client, keeps exactly one body
 /// transport, one Dot observer, one transcript feed, one presentation poll and
-one invitation loop alive, and publishes the single derived ring state the
+/// one invitation loop alive, and publishes the single derived ring state the
 /// whole app renders.
 @MainActor
 final class AppModel: ObservableObject {

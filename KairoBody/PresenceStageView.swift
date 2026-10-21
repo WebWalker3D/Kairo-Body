@@ -59,7 +59,7 @@ struct PresenceStageView: View {
         }
     }
 
-    private func ringStage(_ geometry: GeometryReader) -> some View {
+    private func ringStage(_ geometry: GeometryProxy) -> some View {
         let side = min(geometry.size.width, geometry.size.height - 260)
         return ZStack {
             KairoRingMetalView(state: model.renderState())
