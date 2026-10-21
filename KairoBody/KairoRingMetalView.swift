@@ -43,13 +43,16 @@ struct KairoRingMetalView: UIViewRepresentable {
 
     final class Renderer: NSObject, MTKViewDelegate {
         private var pipeline: MTLRenderPipelineState?
+        private var queue: MTLCommandQueue?
         private var uniforms = KairoRingUniformsStorage()
         private var start = CFAbsoluteTimeGetCurrent()
         private var size: CGSize = .zero
         private var needsRender = true
 
         func configure(_ view: MTKView) {
-            guard let library = view.device?.makeDefaultLibrary() else { return }
+            guard let device = view.device,
+                  let library = device.makeDefaultLibrary() else { return }
+            queue = device.makeCommandQueue()
             guard let vertex = library.makeFunction(name: "kairoRingVertex"),
                   let fragment = library.makeFunction(name: "kairoRingFragment") else { return }
             let descriptor = MTLRenderPipelineDescriptor()
@@ -77,10 +80,9 @@ struct KairoRingMetalView: UIViewRepresentable {
         func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) { self.size = size }
 
         func draw(in view: MTKView) {
-            guard let pipeline, let descriptor = view.currentRenderPassDescriptor,
+            guard let pipeline, let queue, let descriptor = view.currentRenderPassDescriptor,
                   let drawable = view.currentDrawable,
-                  let commandQueue = view.commandQueue,
-                  let buffer = commandQueue.makeCommandBuffer(),
+                  let buffer = queue.makeCommandBuffer(),
                   let encoder = buffer.makeRenderCommandEncoder(descriptor: descriptor) else { return }
             uniforms.paramsA.x = Float(CFAbsoluteTimeGetCurrent() - start)
             uniforms.bind(encoder)
