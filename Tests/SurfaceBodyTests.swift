@@ -68,7 +68,7 @@ final class SurfaceDeliveryTests: XCTestCase {
             called.append(path)
             return ["destinations": ["ipad_display", "ipad_speech"]]
         })
-        await client.prepare("kairo")
+        try await client.prepare("kairo")
         XCTAssertTrue(called.contains("api/ipad/destinations"))
         XCTAssertTrue(called.contains("api/surfaces/ipad_display/presence"))
         XCTAssertTrue(called.contains("api/surfaces/ipad_speech/presence"))
@@ -87,16 +87,17 @@ final class BodyProtocolTests: XCTestCase {
         let message = facts.makeMessage(sequence: 3, bodyID: "ipad-pro-2017",
                                         sessionID: "s", foreground: true)
         let interfaces = message["interfaces"] as? [String: Any]
-        func availability(_ name: String) -> (String, String?) {
+        func availability(_ name: String) -> String {
             let value = interfaces?[name] as? [String: Any]
-            return ((value?["availability"] as? String) ?? "", value?["reason"] as? String)
+            let reason = value?["reason"] as? String ?? "-"
+            return "\((value?["availability"] as? String ?? "?"))|\(reason)"
         }
-        XCTAssertEqual(availability("front_camera"), ("ready", nil))
-        XCTAssertEqual(availability("rear_camera"), ("blocked", "blocked_by_body"))
-        XCTAssertEqual(availability("microphone"), ("disabled", "permission_off"))
-        XCTAssertEqual(availability("speech"), ("busy", "speech_busy"))
-        XCTAssertEqual(availability("display"), ("blocked", "display_hidden"))
-        XCTAssertEqual(availability("location"), ("disabled", "permission_off"))
+        XCTAssertEqual(availability("front_camera"), "ready|-")
+        XCTAssertEqual(availability("rear_camera"), "blocked|blocked_by_body")
+        XCTAssertEqual(availability("microphone"), "disabled|permission_off")
+        XCTAssertEqual(availability("speech"), "busy|speech_busy")
+        XCTAssertEqual(availability("display"), "blocked|display_hidden")
+        XCTAssertEqual(availability("location"), "disabled|permission_off")
         XCTAssertEqual(message["schema"] as? String, "kairo.body_capabilities.v1")
         XCTAssertEqual(message["permission_revision"] as? Int, 0)
     }
@@ -156,6 +157,7 @@ final class BodyProtocolTests: XCTestCase {
     }
 }
 
+@MainActor
 final class SpeechTests: XCTestCase {
     func testShortAnswersStayInOneChunk() {
         XCTAssertEqual(SpeechService.chunks("Hello there."), ["Hello there."])
@@ -179,6 +181,7 @@ final class SpeechTests: XCTestCase {
     }
 }
 
+@MainActor
 final class MiscTests: XCTestCase {
     func testPairingChallengeNormalization() {
         XCTAssertEqual(PairingClient.normalizedChallenge(" 482-913 \n"), "482913")
