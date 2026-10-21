@@ -39,7 +39,7 @@ final class TranscriptFeedClient: ObservableObject {
         // Leaving the foreground pauses reads but keeps the transcript and its
         // scroll position; only missing or refused authority clears it.
         guard foreground else { return }
-        following = true        following = true
+        following = true
         let current = generation
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
