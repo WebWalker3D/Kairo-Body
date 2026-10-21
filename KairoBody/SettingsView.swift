@@ -9,34 +9,48 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                presenceSection
-                voiceSection
-                sensesSection
-                displaySection
-                provisioningSection
-                aboutSection
-            }
-            .navigationTitle("Settings")
-            .scrollContentBackground(.hidden)
-            .background(KairoTheme.background)
-            .onChange(of: model.settings.followEcho) { _, _ in model.settingsChanged() }
-            .onChange(of: model.settings.invitationsEnabled) { _, _ in model.settingsChanged() }
-            .onChange(of: model.settings.voiceWakeEnabled) { _, _ in model.settingsChanged() }
-            .onChange(of: model.settings.sendLocation) { _, _ in model.settingsChanged() }
-            .onChange(of: model.settings.allowRemoteCamera) { _, _ in model.settingsChanged() }
-            .onChange(of: model.settings.cameraMode) { _, _ in model.settingsChanged() }
-            .onChange(of: model.settings.keepAwake) { _, _ in model.settingsChanged() }
-            .onChange(of: model.settings.dimWhenStill) { _, _ in model.settingsChanged() }
-            .onChange(of: model.settings.screensaverMinutes) { _, _ in model.settingsChanged() }
+            SettingsForm(settings: model.settings, voice: model.voice, pairing: model.pairing)
+                .navigationTitle("Settings")
+                .scrollContentBackground(.hidden)
+                .background(KairoTheme.background)
         }
+    }
+}
+
+/// The toggles bind through observed objects (a `let` reference on the model
+/// cannot carry `$model.settings.x`), and the change handlers live where the
+/// observation does.
+private struct SettingsForm: View {
+    @ObservedObject var settings: AppSettings
+    @ObservedObject var voice: VoiceInputService
+    @ObservedObject var pairing: PairingClient
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        Form {
+            presenceSection
+            voiceSection
+            sensesSection
+            displaySection
+            provisioningSection
+            aboutSection
+        }
+        .onChange(of: settings.followEcho) { _, _ in model.settingsChanged() }
+        .onChange(of: settings.invitationsEnabled) { _, _ in model.settingsChanged() }
+        .onChange(of: settings.voiceWakeEnabled) { _, _ in model.settingsChanged() }
+        .onChange(of: settings.sendLocation) { _, _ in model.settingsChanged() }
+        .onChange(of: settings.allowRemoteCamera) { _, _ in model.settingsChanged() }
+        .onChange(of: settings.cameraMode) { _, _ in model.settingsChanged() }
+        .onChange(of: settings.keepAwake) { _, _ in model.settingsChanged() }
+        .onChange(of: settings.dimWhenStill) { _, _ in model.settingsChanged() }
+        .onChange(of: settings.screensaverMinutes) { _, _ in model.settingsChanged() }
     }
 
     private var presenceSection: some View {
         Section("Presence") {
-            Toggle("Follow the Dot", isOn: $model.settings.followEcho)
-            Toggle("Show the shared conversation", isOn: $model.settings.echoTranscriptVisible)
-            Toggle("Accept conversation invitations", isOn: $model.settings.invitationsEnabled)
+            Toggle("Follow the Dot", isOn: $settings.followEcho)
+            Toggle("Show the shared conversation", isOn: $settings.echoTranscriptVisible)
+            Toggle("Accept conversation invitations", isOn: $settings.invitationsEnabled)
             Text(followEchoCaption)
                 .font(.caption).foregroundStyle(.secondary)
         }
@@ -44,11 +58,11 @@ struct SettingsView: View {
 
     private var voiceSection: some View {
         Section("Voice") {
-            Toggle("Wake on “Kairo”", isOn: $model.settings.voiceWakeEnabled)
-            Text(model.voice.status).font(.caption).foregroundStyle(.secondary)
-            if let heard = model.voice.lastCommand, !heard.isEmpty {
+            Toggle("Wake on “Kairo”", isOn: $settings.voiceWakeEnabled)
+            Text(voice.status).font(.caption).foregroundStyle(.secondary)
+            if let heard = voice.lastCommand, !heard.isEmpty {
                 Text("Last heard: \(heard)").font(.caption).foregroundStyle(.secondary)
-                Button("Clear") { model.voice.clearTranscript() }
+                Button("Clear") { voice.clearTranscript() }
                     .font(.caption)
             }
         }
@@ -56,9 +70,9 @@ struct SettingsView: View {
 
     private var sensesSection: some View {
         Section("Senses") {
-            Toggle("Share location observations", isOn: $model.settings.sendLocation)
-            Toggle("Allow remote front-camera captures", isOn: $model.settings.allowRemoteCamera)
-            Toggle("Camera mode (live front view)", isOn: $model.settings.cameraMode)
+            Toggle("Share location observations", isOn: $settings.sendLocation)
+            Toggle("Allow remote front-camera captures", isOn: $settings.allowRemoteCamera)
+            Toggle("Camera mode (live front view)", isOn: $settings.cameraMode)
             Text("The rear camera is always blocked by body policy. Motion video is never sent; captures are one-shot, resized ≤1280 px.")
                 .font(.caption).foregroundStyle(.secondary)
         }
@@ -66,13 +80,13 @@ struct SettingsView: View {
 
     private var displaySection: some View {
         Section("Display") {
-            Toggle("Keep the display awake", isOn: $model.settings.keepAwake)
-            Toggle("Dim when still", isOn: $model.settings.dimWhenStill)
-            Picker("Screensaver after stillness", selection: $model.settings.screensaverMinutes) {
+            Toggle("Keep the display awake", isOn: $settings.keepAwake)
+            Toggle("Dim when still", isOn: $settings.dimWhenStill)
+            Picker("Screensaver after stillness", selection: $settings.screensaverMinutes) {
                 Text("30 minutes").tag(30)
                 Text("60 minutes").tag(60)
             }
-            .disabled(!model.settings.dimWhenStill)
+            .disabled(!settings.dimWhenStill)
             Text("Kairo's actual work — on any surface, including the Dot — keeps the screen alive. A bare heartbeat never does.")
                 .font(.caption).foregroundStyle(.secondary)
         }
@@ -88,8 +102,8 @@ struct SettingsView: View {
             LabeledContent("Agent credential", value: AppConfig.agentToken.isEmpty ? "missing" : "stored")
             LabeledContent("Owner pairing", value: pairingSummary)
             NavigationLink("Credential setup") { SetupView() }
-            if !model.pairing.isPaired {
-                NavigationLink("Pair this iPad") { model.destination = .privateRoom }
+            if !pairing.isPaired {
+                Button("Pair this iPad") { model.destination = .privateRoom }
                     .tint(KairoTheme.bond)
             }
             Text("Public builds carry no personal provisioning: enter Kairo's credentials for this iPad once here. Replacing an installed body app keeps everything this device already stored.")
@@ -114,7 +128,7 @@ struct SettingsView: View {
     }
 
     private var followEchoCaption: String {
-        guard model.settings.followEcho else {
+        guard settings.followEcho else {
             return "Off: this iPad keeps its own separate conversation."
         }
         return EchoBinding.configuredSessionID.isEmpty
@@ -123,7 +137,7 @@ struct SettingsView: View {
     }
 
     private var pairingSummary: String {
-        switch model.pairing.state {
+        switch pairing.state {
         case .paired(let endpoint): return "paired · \(endpoint)"
         case .pairing: return "pairing…"
         case .failed: return "last attempt failed"
