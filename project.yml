@@ -16,7 +16,7 @@ targets:
     sources:
       - path: KairoBody
     info:
-      path: Info.plist
+      path: KairoBody/Info.plist
       properties:
         CFBundleDisplayName: Kairo Body
         CFBundleShortVersionString: "2.0.0"
