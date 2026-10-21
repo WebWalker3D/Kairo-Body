@@ -311,6 +311,11 @@ struct FrontCameraPreview: UIViewRepresentable {
         override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
         var previewLayer: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
 
+        var session: AVCaptureSession? {
+            get { previewLayer.session }
+            set { previewLayer.session = newValue }
+        }
+
         init(session: AVCaptureSession) {
             super.init(frame: .zero)
             previewLayer.session = session

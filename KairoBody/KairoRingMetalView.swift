@@ -120,7 +120,7 @@ struct KairoRingUniformsStorage {
         let levels = state.emitterLevels.count == 12 ? state.emitterLevels :
             RingMirror.resample(state.emitterLevels.map(Double.init), to: 12).map(Float.init)
         for index in 0..<12 {
-            emitters[index] = SIMD4<Float(levels[safe: index] ?? 0, Float(index) * 0.53, 0, 0)
+            emitters[index] = SIMD4<Float>(levels[safe: index] ?? 0, Float(index) * 0.53, 0, 0)
         }
     }
 

@@ -95,7 +95,7 @@ struct LookTogetherView: View {
                 .font(.system(size: 22, weight: .semibold, design: .rounded))
                 .foregroundStyle(KairoTheme.prose)
             Spacer()
-        })
+        }
         .padding(.top, 14)
     }
 

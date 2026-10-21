@@ -45,8 +45,8 @@ struct BodySurfaceView: View {
             Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 6) {
                 gridRow("Endpoint", model.body.serverEndpointID ?? "awaiting hello_ack")
                 gridRow("Session", model.body.sessionID)
-                gridRow("Frames", model.body.lastFrameAt.map { "last \($0.formatted(date: .omitted, time: .standardChanged))" } ?? "none yet")
-                gridRow("Capabilities", model.body.capabilitiesConfirmedAt.map { "confirmed \($0.formatted(date: .omitted, time: .standardChanged))" } ?? "not confirmed")
+                gridRow("Frames", model.body.lastFrameAt.map { "last \($0.formatted(date: .omitted, time: .standard))" } ?? "none yet")
+                gridRow("Capabilities", model.body.capabilitiesConfirmedAt.map { "confirmed \($0.formatted(date: .omitted, time: .standard))" } ?? "not confirmed")
                 gridRow("Dot observer", model.echo.connected ? "following \(EchoBinding.endpointID)" : "disconnected")
             }
         }

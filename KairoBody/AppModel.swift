@@ -77,14 +77,18 @@ final class AppModel: ObservableObject {
     private var forwardCancellables: [AnyCancellable] = []
 
     private func forwardChangePublishers() {
-        let sources: [any ObservableObject] = [settings, sensors, pairing, feed, presentation,
-                                               invitations, privateRoom, echo, voice, visual,
-                                               body, conversation, surfaceDelivery]
-        for source in sources {
-            forwardCancellables.append(source.objectWillChange.sink { [weak self] _ in
-                self?.objectWillChange.send()
-            })
-        }
+        // Each child is generic-forwarded: an ObservableObject's publisher is
+        // an associated type, so it cannot be reached through `any`.
+        forChild(settings); forChild(sensors); forChild(pairing); forChild(feed)
+        forChild(presentation); forChild(invitations); forChild(privateRoom)
+        forChild(echo); forChild(voice); forChild(visual)
+        forChild(body); forChild(conversation); forChild(surfaceDelivery)
+    }
+
+    private func forChild<_Source: ObservableObject>(_ source: _Source) {
+        forwardCancellables.append(source.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        })
     }
 
     func wireVoiceCallbacks() {
@@ -107,7 +111,7 @@ final class AppModel: ObservableObject {
         presentation.start(paired: pairing.isPaired, foreground: foreground)
         voice.configure(enabled: settings.voiceWakeEnabled, foreground: foreground,
                         conversationBusy: conversation.isSending)
-        invitations.refresh(foreground: foreground && settings.invitationsEnabled && pairing.isPaired)
+        Task { await invitations.refresh(foreground: foreground && settings.invitationsEnabled && pairing.isPaired) }
         if foreground {
             startLoops()
             Task { await conversation.recoverPendingTurn() }

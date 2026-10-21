@@ -95,7 +95,9 @@ final class ConversationClient: ObservableObject {
             guard let self else { return }
             defer { if current == self.generation { self.isSending = false } }
             do {
-                let jobID = turn.jobID ?? try await self.tracker.submit(turn)
+                let jobID: String
+                if let existing = turn.jobID { jobID = existing }
+                else { jobID = try await self.tracker.submit(turn) }
                 var stored = turn; stored.jobID = jobID
                 self.pendingStore.save(stored)
                 guard current == self.generation else { return }
@@ -122,7 +124,9 @@ final class ConversationClient: ObservableObject {
         responseTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let sessionID = attachmentSessionID ?? try await self.conversationSessionID(generation: current)
+                let sessionID: String
+                if let attachmentSessionID { sessionID = attachmentSessionID }
+                else { sessionID = try await self.conversationSessionID(generation: current) }
                 guard current == self.generation else { throw CancellationError() }
                 let destination: String?
                 switch self.outputDestination {
@@ -172,7 +176,7 @@ final class ConversationClient: ObservableObject {
             reply = answer
             status = ""
             if turn.outputDestination == "ipad_speech" {
-                deliverOutput?(jobID, "ipad_speech")
+                await deliverOutput?(jobID, "ipad_speech")
             }
         case .stillRunning(let job):
             // Keep the message recoverable: the job may settle later on any

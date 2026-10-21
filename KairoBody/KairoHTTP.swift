@@ -80,8 +80,8 @@ final class KairoHTTP {
 
     /// POST to the memory body service with the sensory bearer (pairing redeem).
     func sensory(url: URL, body: [String: Any]) async throws -> [String: Any] {
-        guard let base = url.baseURL ?? url,
-              let scheme = base.scheme?.lowercased(), ["http", "https"].contains(scheme),
+        let base = url.baseURL ?? url
+        guard let scheme = base.scheme?.lowercased(), ["http", "https"].contains(scheme),
               base.host == "connect.kairo.icu", base.user == nil, base.password == nil else {
             throw HTTPStatusError(status: 0)
         }
