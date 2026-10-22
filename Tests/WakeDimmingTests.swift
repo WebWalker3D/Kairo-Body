@@ -177,4 +177,21 @@ final class DimmingContactTests: XCTestCase {
         XCTAssertFalse(ContactIntent.shouldSubmit(isBodySurface: true, cancelled: true, conversationBusy: false))
         XCTAssertFalse(ContactIntent.shouldSubmit(isBodySurface: true, cancelled: false, conversationBusy: true))
     }
+
+    func testPluggedInBodyNeverGoesFullyDark() {
+        // 24/7 duty cycle - always foreground, always plugged, screen never
+        // off: on external power the dark stage becomes the living screensaver,
+        // so the surface always shows what Kairo is doing.
+        XCTAssertEqual(MotionDimmingPolicy.effective(stage: .dark, responseActive: false,
+                                                     externalPower: true), .screensaver)
+        // An unplugged appliance keeps the dark stage that protects the panel
+        // and the room.
+        XCTAssertEqual(MotionDimmingPolicy.effective(stage: .dark, responseActive: false,
+                                                     externalPower: false), .dark)
+        // Kairo's actual work still outranks every stage.
+        XCTAssertEqual(MotionDimmingPolicy.effective(stage: .dark, responseActive: true,
+                                                     externalPower: true), .awake)
+        XCTAssertEqual(MotionDimmingPolicy.effective(stage: .awake, responseActive: false,
+                                                     externalPower: true), .awake)
+    }
 }

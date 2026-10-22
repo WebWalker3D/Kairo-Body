@@ -98,7 +98,15 @@ struct KairoRingMetalView: UIViewRepresentable {
                   let drawable = view.currentDrawable,
                   let buffer = queue.makeCommandBuffer(),
                   let encoder = buffer.makeRenderCommandEncoder(descriptor: descriptor) else { return }
-            uniforms.paramsA.x = Float(CFAbsoluteTimeGetCurrent() - start)
+            // This body runs on permanent duty without relaunch. The shader's
+            // waves run on float32, and float32 loses resolution as its clock
+            // grows: after a few days of uptime the motion quantizes, and a
+            // few weeks in it degenerates. Wrapping at twelve hours keeps the
+            // animation exact forever - the cost is one momentary phase skip
+            // a day on an otherwise calm surface, far cheaper than the ring
+            // quietly freezing on a shelf that never sleeps.
+            let elapsed = Float(CFAbsoluteTimeGetCurrent() - start)
+            uniforms.paramsA.x = elapsed.truncatingRemainder(dividingBy: 43_200)
             uniforms.bind(encoder)
             encoder.setRenderPipelineState(pipeline)
             encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)

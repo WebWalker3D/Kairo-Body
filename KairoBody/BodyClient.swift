@@ -223,6 +223,15 @@ final class BodyClient: ObservableObject {
     var dimmingBusyProbe: () -> Bool = { false }
     private func dimmingIsBusy() -> Bool { responseActive || dimmingBusyProbe() }
 
+    /// Whether this body is on external power. SensorManager enables battery
+    /// monitoring when the body starts; until the state is actually known the
+    /// body behaves like a battery device and keeps the dark stage, so the
+    /// never-dark rule only fires on evidence.
+    private var isOnExternalPower: Bool {
+        guard UIDevice.current.isBatteryMonitoringEnabled else { return false }
+        return [.charging, .full].contains(UIDevice.current.batteryState)
+    }
+
     func noteUserActivity() {
         guard shouldRun, settings.dimWhenStill, isForeground else { return }
         applyDimming(dimmingPolicy.observe(at: Date(), movement: true))
@@ -282,7 +291,9 @@ final class BodyClient: ObservableObject {
     }
 
     private func applyDimming(_ stage: MotionDimmingPolicy.Stage) {
-        let stage = responseActive ? MotionDimmingPolicy.Stage.awake : stage
+        let stage = MotionDimmingPolicy.effective(stage: stage,
+                                                  responseActive: responseActive,
+                                                  externalPower: isOnExternalPower)
         guard stage != dimmingStage else {
             if stage == .awake && brightnessRampTask == nil {
                 savedBrightness = UIScreen.main.brightness

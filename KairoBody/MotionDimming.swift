@@ -32,6 +32,16 @@ struct MotionDimmingPolicy {
         if quiet >= idleSeconds { return .screensaver }
         return .awake
     }
+
+    /// A body on permanent duty - always foreground, always plugged - must
+    /// never go fully dark: the dark stage for an unplugged appliance becomes
+    /// the living screensaver while it is on external power. This surface
+    /// shows what Kairo is doing, even at 4 a.m. with nobody in the room.
+    static func effective(stage: Stage, responseActive: Bool, externalPower: Bool) -> Stage {
+        if responseActive { return .awake }
+        if stage == .dark && externalPower { return .screensaver }
+        return stage
+    }
 }
 
 struct FrameMotionAnalyzer {
