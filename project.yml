@@ -19,8 +19,8 @@ targets:
       path: KairoBody/Info.plist
       properties:
         CFBundleDisplayName: Kairo Body
-        CFBundleShortVersionString: "2.0.2"
-        CFBundleVersion: "52"
+        CFBundleShortVersionString: "2.0.3"
+        CFBundleVersion: "53"
         # Public builds carry no personal provisioning. These keys stay empty
         # in the repository; credentials come from on-device setup and the
         # Echo endpoint id falls back to the constant in AppConfig.

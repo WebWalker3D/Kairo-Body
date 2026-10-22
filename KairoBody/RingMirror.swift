@@ -24,6 +24,18 @@ struct RingMirrorState: Equatable {
 enum RingMirror {
     static let emitterCount = 12
 
+    /// The composed phase becomes a verb the ring animates: what Kairo is
+    /// doing right now. Waiting-on-owner is an attentive posture, so it moves
+    /// like listening; reflection and disconnection stay calm.
+    static func activity(for phase: RingMirrorState.Phase) -> RingActivity {
+        switch phase {
+        case .speaking: return .speaking
+        case .thinking: return .thinking
+        case .listening, .waiting: return .listening
+        case .idle, .reflecting, .disconnected: return .idle
+        }
+    }
+
     /// 32-level Dot waveforms render onto the physical ring's twelve measured
     /// emitters; the resample is deterministic so both bodies show the same
     /// light.

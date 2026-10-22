@@ -35,6 +35,17 @@ struct ExpressionPalette {
         (Self.rgb(primaryHex), Self.rgb(accentHex))
     }
 
+    /// How this mood likes to move, in the renderer's vocabulary — the same
+    /// pulse/orbit/spark/breathe modes the 1.0.x body and the Dot animate.
+    var motionMode: RingMotion {
+        switch motion.lowercased() {
+        case "orbit": return .orbit
+        case "pulse": return .pulse
+        case "spark": return .spark
+        default: return .breathe
+        }
+    }
+
     private static func rgb(_ hex: String) -> SIMD3<Float> {
         guard let value = UInt32(hex.dropFirst(), radix: 16) else { return SIMD3<Float>(1, 1, 1) }
         return SIMD3<Float>(Float((value >> 16) & 0xff) / 255,

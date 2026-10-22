@@ -13,6 +13,20 @@ struct RingRenderState: Equatable {
     var intensity: Float = 0.9
     var sleeping = false
     var fade: Float = 1
+    // What Kairo is doing, and how the committed mood likes to move. The
+    // shader animates both with the 1.0.x vocabulary; a speaking body where
+    // the Dot's waveform is stale still visibly speaks.
+    var activity: RingActivity = .idle
+    var activityLevel: Float = 0
+    var motion: RingMotion = .breathe
+}
+
+enum RingActivity: Int {
+    case idle = 0, listening, speaking, thinking
+}
+
+enum RingMotion: Int {
+    case breathe = 0, orbit, pulse, spark
 }
 
 struct KairoRingMetalView: UIViewRepresentable {
@@ -104,6 +118,7 @@ struct KairoRingUniformsStorage {
     var core = SIMD4<Float>(1, 1, 1, 0)
     var paramsA = SIMD4<Float>(0, 0.35, 0, 0.9)
     var paramsB = SIMD4<Float>(0.34, 0.05, 1, 0)
+    var paramsC = SIMD4<Float>(0, 0, 0, 0)
     var emitters: [SIMD4<Float>] = Array(repeating: .zero, count: 12)
 
     mutating func apply(_ state: RingRenderState, viewport: CGSize) {
@@ -119,6 +134,8 @@ struct KairoRingUniformsStorage {
         paramsB.y = 0.055
         paramsB.z = state.fade
         paramsB.w = state.sleeping ? 1 : 0
+        paramsC = SIMD4<Float>(Float(state.activity.rawValue), state.activityLevel,
+                               Float(state.motion.rawValue), 0)
         let levels = state.emitterLevels.count == 12 ? state.emitterLevels :
             RingMirror.resample(state.emitterLevels.map(Double.init), to: 12).map(Float.init)
         for index in 0..<12 {

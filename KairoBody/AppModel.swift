@@ -210,6 +210,12 @@ final class AppModel: ObservableObject {
         state.energy = Float(max(mirror.intensity, Double(palette.energy) * (mirror.phase == .idle ? 0.25 : 0.7)))
         state.intensity = body.connectionState == .connected || mirror.dotFresh ? 0.95 : 0.55
         state.sleeping = body.screensaverActive
+        // The verbs: speaking/thinking/listening animate the ring even when
+        // this iPad is the body speaking and the Dot's waveform is stale -
+        // the phase itself is the observed fact, as 1.0.x treated it.
+        state.activity = RingMirror.activity(for: mirror.phase)
+        state.activityLevel = state.activity == .idle ? 0 : Float(max(mirror.intensity, 0.6))
+        state.motion = palette.motionMode
         return state
     }
 
@@ -222,6 +228,7 @@ final class AppModel: ObservableObject {
         state.energy *= 0.6
         state.breath = max(0.2, state.breath)
         state.intensity = min(max(state.intensity, 0.35), 0.6)
+        state.activityLevel *= 0.45
         state.sleeping = false
         return state
     }
