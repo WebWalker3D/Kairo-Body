@@ -70,6 +70,9 @@ jobs:
           sleep 2
           xcrun simctl io "$simulator_id" screenshot KairoBody-setup.png
           xcrun simctl terminate "$simulator_id" icu.kairo.body || true
+          # A fresh install opens on the setup sheet; defer it exactly like the
+          # "Not now" button does so the second capture shows the living stage.
+          xcrun simctl spawn "$simulator_id" defaults write icu.kairo.body setupDeferred -bool true
           xcrun simctl launch "$simulator_id" icu.kairo.body
           sleep 4
           xcrun simctl io "$simulator_id" screenshot KairoBody-stage.png

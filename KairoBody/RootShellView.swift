@@ -3,6 +3,7 @@ import SwiftUI
 struct RootShellView: View {
     @EnvironmentObject private var model: AppModel
     @State private var needsSetup = !AppConfig.hasMinimumProvisioning
+        && !UserDefaults.standard.bool(forKey: "setupDeferred")
 
     var body: some View {
         ZStack {

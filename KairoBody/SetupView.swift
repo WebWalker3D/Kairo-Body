@@ -47,7 +47,10 @@ struct SetupView: View {
                     if !AppConfig.agentToken.isEmpty {
                         Button("Continue with stored credentials") { dismiss() }
                     } else {
-                        Button("Not now (stages stay local)") { dismiss() }
+                        Button("Not now (stages stay local)") {
+                            UserDefaults.standard.set(true, forKey: "setupDeferred")
+                            dismiss()
+                        }
                     }
                 }
                 Section("Status") {
