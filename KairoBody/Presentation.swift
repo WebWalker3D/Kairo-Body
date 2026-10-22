@@ -56,8 +56,11 @@ struct BodyProximity {
     let expiresAt: Date
 
     func isFresh(at now: Date) -> Bool {
-        observedAt <= now && expiresAt > now && expiresAt > observedAt &&
-            expiresAt.timeIntervalSince(observedAt) <= 45
+        // Same clock-skew tolerance as the enclosing presentation snapshot:
+        // both fields are stamped by the same server, and a strict gate
+        // rejects fresh observations whenever the wall clock steps.
+        observedAt <= now.addingTimeInterval(5) && expiresAt > now &&
+            expiresAt > observedAt && expiresAt.timeIntervalSince(observedAt) <= 45
     }
 
     init?(object: [String: Any]?, now: Date) {
