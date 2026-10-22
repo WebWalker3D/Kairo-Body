@@ -161,6 +161,9 @@ final class AppModel: ObservableObject {
             while !Task.isCancelled {
                 guard let self else { return }
                 self.ring = self.currentRingState()
+                // A screensavered stage is not a usable display surface; the
+                // delivery presence and claim paths must report that honestly.
+                surfaceDelivery.setDisplayVisible(!body.screensaverActive)
                 // The server-side "is Kairo working anywhere" read is cached
                 // for eight seconds by refreshProcessing itself; asking every
                 // tick is how kairoBusy can hold the display at all.

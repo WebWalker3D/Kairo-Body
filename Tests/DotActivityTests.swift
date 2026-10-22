@@ -103,7 +103,7 @@ final class DotActivityTests: XCTestCase {
         state.timeoutReplay(state.pendingReplayID ?? "")
         XCTAssertNil(state.pendingReplayID)
         // Speaking now: replay is not offered while the Dot is busy.
-        XCTAssertTrue(state.receive(message(phase: "speaking", replay: true)))
+        XCTAssertTrue(state.receive(message(sequence: 2, phase: "speaking", replay: true)))
         XCTAssertFalse(state.canReplay())
     }
 

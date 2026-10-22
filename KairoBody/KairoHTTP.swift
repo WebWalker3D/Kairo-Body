@@ -180,7 +180,12 @@ final class KairoHTTP {
         guard let appended = components.url else { return nil }
         url.appendPathComponent(appended.path)
         if parts.count == 2, var query = URLComponents(url: url, resolvingAgainstBaseURL: false) {
-            query.percentEncodedQuery = parts[1]
+            // Caller-supplied query text can never abort the process: existing
+            // percent escapes and RFC 3986 query punctuation survive; anything
+            // else (spaces, '#', quotes…) is percent-encoded.
+            let allowed = CharacterSet(charactersIn:
+                "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~:/?@!$&'()*+,;=%")
+            query.percentEncodedQuery = parts[1].addingPercentEncoding(withAllowedCharacters: allowed) ?? parts[1]
             if let queryURL = query.url { url = queryURL }
         }
         return url

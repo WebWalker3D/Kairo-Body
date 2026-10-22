@@ -34,7 +34,7 @@ enum RingMirror {
             // Fewer levels than emitters: hold the ends, stretch the middle.
             return (0..<emitters).map { index in
                 let source = Double(index) * Double(max(levels.count - 1, 1)) / Double(max(emitters - 1, 1))
-                let lower = Int(floor(source))
+                let lower = min(Int(floor(source)), levels.count - 1)
                 let upper = min(lower + 1, levels.count - 1)
                 let fraction = source - Double(lower)
                 return levels[lower] * (1 - fraction) + levels[upper] * fraction

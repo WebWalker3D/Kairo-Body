@@ -16,7 +16,7 @@ final class SurfaceDeliveryClient: ObservableObject {
     private var active: (job: String, target: String)?
     private var generation = UUID()
     private var foreground = true
-    private var displayVisible = false
+    private var displayVisible = true
     private var presenceTask: Task<Void, Never>?
 
     init(request: @escaping Request) {

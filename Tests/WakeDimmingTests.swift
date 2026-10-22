@@ -131,9 +131,11 @@ final class DimmingContactTests: XCTestCase {
         XCTAssertEqual(policy.observe(at: base, movement: true), .awake)
         XCTAssertEqual(policy.observe(at: base.addingTimeInterval(30), movement: false), .awake)
         XCTAssertEqual(policy.observe(at: base.addingTimeInterval(61), movement: false), .screensaver)
-        XCTAssertEqual(policy.observe(at: base.addingTimeInterval(1_799), movement: false), .dark)
-        XCTAssertEqual(policy.observe(at: base.addingTimeInterval(1_801), movement: true), .awake)
-        XCTAssertEqual(policy.observe(at: base.addingTimeInterval(1_862), movement: false), .screensaver)
+        XCTAssertEqual(policy.observe(at: base.addingTimeInterval(1_799), movement: false), .screensaver)
+        XCTAssertEqual(policy.observe(at: base.addingTimeInterval(1_801), movement: false), .dark)
+        // Movement at the darkest point wakes the appliance and restarts the ladder.
+        XCTAssertEqual(policy.observe(at: base.addingTimeInterval(1_802), movement: true), .awake)
+        XCTAssertEqual(policy.observe(at: base.addingTimeInterval(1_863), movement: false), .screensaver)
     }
 
     func testFrameAnalyzerIgnoresNoiseAndCatchesPresence() {
