@@ -14,6 +14,10 @@ final class TranscriptFeedClient: ObservableObject {
     /// Shown beside a transcript that is kept while Kairo cannot be reached.
     @Published private(set) var connectionTrouble: String?
     @Published private(set) var lastUpdatedAt: Date?
+    /// When Kairo last settled an answer on ANY surface, as observed here.
+    /// The iPad is a surface, not a separate Kairo: a Discord answer is the
+    /// body's own answer to show.
+    @Published private(set) var lastAnsweredAt: Date?
     var processing: Bool { following && turns.contains(where: \.active) }
 
     private let http: KairoHTTP
@@ -24,6 +28,7 @@ final class TranscriptFeedClient: ObservableObject {
     private var generation = 0
     private var foreground = true
     private var refreshing = false
+    private var lastSettledCreatedAt: String?
 
     init(http: KairoHTTP = KairoHTTP()) { self.http = http }
 
@@ -67,6 +72,19 @@ final class TranscriptFeedClient: ObservableObject {
         turns = []; liveState = nil
         error = nil; observerCredential = ""; observerValidator = nil
         connectionTrouble = nil; lastUpdatedAt = nil; consecutiveFailures = 0
+        lastAnsweredAt = nil; lastSettledCreatedAt = nil
+    }
+
+    /// A settled turn is something Kairo said out loud somewhere. Record the
+    /// moment a newly settled answer is first observed so the body can beat
+    /// it briefly. The first read only establishes the baseline: history that
+    /// settled before this feed started is not a fresh answer.
+    private func noteAnswers(in turns: [ConversationTurn]) {
+        guard let newest = turns.compactMap({ $0.settledStatus == nil ? nil : $0.createdAt })
+            .max() else { return }
+        let previous = lastSettledCreatedAt
+        lastSettledCreatedAt = newest
+        if previous != nil, newest != previous { lastAnsweredAt = Date() }
     }
 
     /// One conditional read. Timeouts, server errors, unrequested 304s and
@@ -103,6 +121,7 @@ final class TranscriptFeedClient: ObservableObject {
                 }
                 turns = jobs.compactMap { ConversationTurn(observedJob: $0) }
                     .sorted { $0.createdAt < $1.createdAt }
+                noteAnswers(in: turns)
                 liveState = LiveStateSnapshot(snapshot: snapshot)
                 observerValidator = etag
             case .authorizationLost:

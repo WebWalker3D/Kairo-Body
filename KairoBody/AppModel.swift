@@ -191,6 +191,8 @@ final class AppModel: ObservableObject {
         RingMirror.compose(
             dot: echo.state,
             presentation: presentation.snapshot,
+            remote: RemoteActs(thinking: feed.processing,
+                               answeredAgo: feed.lastAnsweredAt.map { max(0, now.timeIntervalSince($0)) }),
             local: LocalActs(speaking: speech.isBusy,
                              capturing: voice.isCapturing,
                              sending: conversation.isSending),
