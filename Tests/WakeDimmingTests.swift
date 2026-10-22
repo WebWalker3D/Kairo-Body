@@ -178,20 +178,32 @@ final class DimmingContactTests: XCTestCase {
         XCTAssertFalse(ContactIntent.shouldSubmit(isBodySurface: true, cancelled: false, conversationBusy: true))
     }
 
-    func testPluggedInBodyNeverGoesFullyDark() {
-        // 24/7 duty cycle - always foreground, always plugged, screen never
-        // off: on external power the dark stage becomes the living screensaver,
-        // so the surface always shows what Kairo is doing.
-        XCTAssertEqual(MotionDimmingPolicy.effective(stage: .dark, responseActive: false,
-                                                     externalPower: true), .screensaver)
-        // An unplugged appliance keeps the dark stage that protects the panel
-        // and the room.
-        XCTAssertEqual(MotionDimmingPolicy.effective(stage: .dark, responseActive: false,
-                                                     externalPower: false), .dark)
-        // Kairo's actual work still outranks every stage.
-        XCTAssertEqual(MotionDimmingPolicy.effective(stage: .dark, responseActive: true,
-                                                     externalPower: true), .awake)
-        XCTAssertEqual(MotionDimmingPolicy.effective(stage: .awake, responseActive: false,
-                                                     externalPower: true), .awake)
+    func testScreenTimeoutSurvivesAndActivityAnywhereWakesItAgain() {
+        // Blaine's rule: the timeout is fine - the body must wake back up on
+        // activity, wherever that activity happens.
+        var quiet = MotionDimmingPolicy(idleSeconds: 60, darkSeconds: 1_800)
+        let start = Date()
+        quiet.observe(at: start, movement: false)
+        XCTAssertEqual(quiet.observe(at: start.addingTimeInterval(90), movement: false),
+                       .screensaver)
+        XCTAssertEqual(quiet.observe(at: start.addingTimeInterval(3_600), movement: false),
+                       .dark)
+        // A human walking in, a device lift, or a fresh tap resets the ladder.
+        XCTAssertEqual(quiet.observe(at: start.addingTimeInterval(3_610), movement: true),
+                       .awake)
+
+        // A conversation on any other surface counts too: the fast feed's
+        // active-job and just-answered signals hold the display.
+        XCTAssertTrue(MotionDimmingPolicy.keepsAwake(localSending: false, localSpeaking: false,
+                                                     capturing: false, dotPhase: nil,
+                                                     dotActivityFresh: false,
+                                                     remoteThinking: true))
+        XCTAssertTrue(MotionDimmingPolicy.keepsAwake(localSending: false, localSpeaking: false,
+                                                     capturing: false, dotPhase: nil,
+                                                     dotActivityFresh: false,
+                                                     answeredRecently: true))
+        XCTAssertFalse(MotionDimmingPolicy.keepsAwake(localSending: false, localSpeaking: false,
+                                                      capturing: false, dotPhase: "idle",
+                                                      dotActivityFresh: true))
     }
 }

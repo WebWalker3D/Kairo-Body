@@ -18,10 +18,17 @@ struct MotionDimmingPolicy {
 
     /// `kairoBusy`: the server says Kairo is working, queued or waiting on the
     /// owner, on any surface — not only while this iPad's request is in flight.
+    /// `remoteThinking`/`answeredRecently` come from the fast conversation
+    /// feed: a Discord or Dot conversation wakes this surface the moment the
+    /// job starts and keeps it lit briefly after the answer lands, without
+    /// waiting for the slower server-wide poll.
     static func keepsAwake(localSending: Bool, localSpeaking: Bool, capturing: Bool,
                            dotPhase: String?, dotActivityFresh: Bool,
-                           kairoBusy: Bool = false) -> Bool {
+                           kairoBusy: Bool = false,
+                           remoteThinking: Bool = false,
+                           answeredRecently: Bool = false) -> Bool {
         localSending || localSpeaking || capturing || kairoBusy ||
+            remoteThinking || answeredRecently ||
             (dotActivityFresh && ["speech_detected", "thinking", "speaking", "replaying"].contains(dotPhase ?? ""))
     }
 
@@ -31,16 +38,6 @@ struct MotionDimmingPolicy {
         if quiet >= darkSeconds { return .dark }
         if quiet >= idleSeconds { return .screensaver }
         return .awake
-    }
-
-    /// A body on permanent duty - always foreground, always plugged - must
-    /// never go fully dark: the dark stage for an unplugged appliance becomes
-    /// the living screensaver while it is on external power. This surface
-    /// shows what Kairo is doing, even at 4 a.m. with nobody in the room.
-    static func effective(stage: Stage, responseActive: Bool, externalPower: Bool) -> Stage {
-        if responseActive { return .awake }
-        if stage == .dark && externalPower { return .screensaver }
-        return stage
     }
 }
 

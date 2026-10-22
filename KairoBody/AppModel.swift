@@ -244,7 +244,11 @@ final class AppModel: ObservableObject {
             capturing: voice.isCapturing,
             dotPhase: echo.state.activity?.phase,
             dotActivityFresh: echo.state.activity.map { $0.expiresAt > Date() } ?? false,
-            kairoBusy: kairoProcessingCache?.value == true)
+            kairoBusy: kairoProcessingCache?.value == true,
+            remoteThinking: feed.processing,
+            answeredRecently: feed.lastAnsweredAt.map {
+                Date().timeIntervalSince($0) <= 8
+            } ?? false)
     }
 
     func refreshProcessing() async {
