@@ -43,6 +43,30 @@ struct LocationFrame: Codable {
     let courseDeg: Double?
     let headingDeg: Double?
     let observedAt: String?
+
+    // The sensory service validates the location object by exact key set: all
+    // ten keys must be present, and a value may be null. Synthesized Codable
+    // would DROP nil keys, so the server rejects the frame
+    // ("invalid location schema") and closes the socket seconds after every
+    // connect. These explicit encoders are what make 1.0.x compatible wire.
+    private enum CodingKeys: String, CodingKey {
+        case enabled, available, latitude, longitude, horizontalAccuracyM
+        case altitudeM, speedMps, courseDeg, headingDeg, observedAt
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var fields = encoder.container(keyedBy: CodingKeys.self)
+        try fields.encode(enabled, forKey: .enabled)
+        try fields.encode(available, forKey: .available)
+        try fields.encode(latitude, forKey: .latitude)
+        try fields.encode(longitude, forKey: .longitude)
+        try fields.encode(horizontalAccuracyM, forKey: .horizontalAccuracyM)
+        try fields.encode(altitudeM, forKey: .altitudeM)
+        try fields.encode(speedMps, forKey: .speedMps)
+        try fields.encode(courseDeg, forKey: .courseDeg)
+        try fields.encode(headingDeg, forKey: .headingDeg)
+        try fields.encode(observedAt, forKey: .observedAt)
+    }
 }
 
 struct PressureFrame: Codable {
@@ -59,6 +83,22 @@ struct DeviceFrame: Codable {
     let network: String
     let orientation: String
     let screenBrightness: Double
+
+    // Same exact-key-set contract as the location object: batteryLevel is
+    // null when the device cannot report it, but the key must be present.
+    private enum CodingKeys: String, CodingKey {
+        case observedAt, batteryLevel, batteryState, network, orientation, screenBrightness
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var fields = encoder.container(keyedBy: CodingKeys.self)
+        try fields.encode(observedAt, forKey: .observedAt)
+        try fields.encode(batteryLevel, forKey: .batteryLevel)
+        try fields.encode(batteryState, forKey: .batteryState)
+        try fields.encode(network, forKey: .network)
+        try fields.encode(orientation, forKey: .orientation)
+        try fields.encode(screenBrightness, forKey: .screenBrightness)
+    }
 }
 
 struct SensorFrame: Codable {

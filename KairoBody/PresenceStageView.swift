@@ -273,57 +273,96 @@ struct ScreensaverOverlay: View {
     @EnvironmentObject private var model: AppModel
     @State private var appearedAt = Date()
 
-    private static let cardSeconds = 15
-    private static let anchorSeconds = 45
-    // Clockwise: a card lingers one zone, then travels to the next. Long
-    // static pixels are what burn into an OLED; this never parks one.
-    private static let anchors: [Alignment] = [.topLeading, .topTrailing, .bottomTrailing, .bottomLeading]
+    private static let cardSeconds = 12.0
+    // One slow revolution carries the ring and the card block around each
+    // other: calm to watch, continuous for the panel, and the card block
+    // always sits opposite the light it belongs to.
+    private static let orbitSeconds = 150.0
+    private static let fadeSeconds = 1.6
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            let elapsed = context.date.timeIntervalSince(appearedAt)
-            let cards = BodyAmbient.cards(ring: model.ring,
-                                          presentation: model.presentation.snapshot,
-                                          socketConnected: model.body.connectionState == .connected,
-                                          now: context.date)
-            let cardIndex = cards.isEmpty ? 0 : Int(elapsed / Double(Self.cardSeconds)) % cards.count
-            let anchorIndex = Int(elapsed / Double(Self.anchorSeconds)) % Self.anchors.count
-            let card = cardIndex < cards.count ? cards[cardIndex]
-                                               : BodyAmbient.Card(title: "Quiet — online", detail: nil)
-            ZStack {
-                Color.black.ignoresSafeArea()
-                KairoRingMetalView(state: model.ambientRingState(now: context.date),
-                                   framesPerSecond: 2)
-                    .frame(width: 190, height: 190)
-                    .offset(x: CGFloat(26 * sin(elapsed / 23)),
-                            y: CGFloat(18 * sin(elapsed / 31 + 1)))
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(card.title)
-                        .font(.system(size: 40, weight: .thin, design: .rounded))
-                        .foregroundStyle(KairoTheme.chrome.opacity(0.75))
-                    if let detail = card.detail {
-                        Text(detail)
-                            .font(.system(size: 15, weight: .medium, design: .rounded))
-                            .foregroundStyle(KairoTheme.faint.opacity(0.8))
-                    }
-                    Text(context.date, style: .time)
-                        .font(.system(size: 22, weight: .thin, design: .rounded))
-                        .foregroundStyle(KairoTheme.faint.opacity(0.4))
-                        .padding(.top, 6)
+        GeometryReader { geo in
+            TimelineView(.animation(minimumInterval: 0.25, paused: false)) { context in
+                let elapsed = context.date.timeIntervalSince(appearedAt)
+                let size = geo.size
+                let center = CGPoint(x: size.width / 2, y: size.height / 2)
+                let theta = 2 * Double.pi * elapsed / Self.orbitSeconds
+                let orbitX = size.width * 0.23
+                let orbitY = size.height * 0.17
+                let cards = cardsFor(now: context.date)
+                ZStack {
+                    Color.black.ignoresSafeArea()
+                    KairoRingMetalView(state: model.ambientRingState(now: context.date),
+                                       framesPerSecond: 10)
+                        .frame(width: min(230, size.width * 0.24, size.height * 0.30),
+                               height: min(230, size.width * 0.24, size.height * 0.30))
+                        .position(x: center.x + orbitX * CGFloat(cos(theta)),
+                                  y: center.y + orbitY * CGFloat(sin(theta)))
+                    cardLayer(cards, elapsed: elapsed)
+                        .position(x: center.x - orbitX * 1.18 * CGFloat(cos(theta)),
+                                  y: center.y - orbitY * 1.45 * CGFloat(sin(theta)))
                 }
-                .padding(.horizontal, 44)
-                .padding(.vertical, 36)
-                .frame(maxWidth: .infinity, maxHeight: .infinity,
-                       alignment: Self.anchors[anchorIndex])
-                .id(cardIndex)
-                .transition(.opacity)
+                .contentShape(Rectangle())
+                .onTapGesture { model.body.noteUserActivity() }
             }
-            .animation(.easeInOut(duration: 1.2), value: cardIndex)
-            .animation(.easeInOut(duration: 2.5), value: anchorIndex)
-            .allowsHitTesting(true)
-            .onTapGesture { model.body.noteUserActivity() }
         }
     }
+
+    private func cardsFor(now: Date) -> [BodyAmbient.Card] {
+        var cards = BodyAmbient.cards(ring: model.ring,
+                                      presentation: model.presentation.snapshot,
+                                      socketConnected: model.body.connectionState == .connected,
+                                      now: now)
+        cards.append(BodyAmbient.Card(title: Self.clockFormat.string(from: now),
+                                      detail: Self.dateFormat.string(from: now)))
+        return cards
+    }
+
+    /// Crossfade by explicit math instead of transitions: the card block is
+    /// rebuilt several times a second by the timeline, and an opacity computed
+    /// from elapsed is the one thing that cannot fail to render.
+    private func cardLayer(_ cards: [BodyAmbient.Card], elapsed: Double) -> some View {
+        let step = elapsed / Self.cardSeconds
+        let position = step - floor(step)
+        let current = (max(0, Int(floor(step))) % cards.count)
+        let next = (current + 1) % cards.count
+        let fade = min(1.0, max(0.0, (position * Self.cardSeconds - (Self.cardSeconds - Self.fadeSeconds))
+                                / Self.fadeSeconds))
+        return ZStack {
+            cardView(cards[current]).opacity(1 - fade)
+            cardView(cards[next]).opacity(fade)
+        }
+        .frame(width: 420)
+    }
+
+    private func cardView(_ card: BodyAmbient.Card) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(card.title)
+                .font(.system(size: 46, weight: .thin, design: .rounded))
+                .foregroundStyle(KairoTheme.chrome.opacity(0.82))
+                .minimumScaleFactor(0.6).lineLimit(1)
+            if let detail = card.detail {
+                Text(detail)
+                    .font(.system(size: 17, weight: .medium, design: .rounded))
+                    .foregroundStyle(KairoTheme.faint.opacity(0.85))
+                    .lineLimit(2)
+            }
+        }
+        .multilineTextAlignment(.leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private static let clockFormat: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    private static let dateFormat: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter
+    }()
 }
 
 /// Local front-camera preview for camera mode. The session is the same quiet
