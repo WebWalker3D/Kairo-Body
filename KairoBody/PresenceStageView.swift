@@ -271,28 +271,55 @@ struct InvitationCard: View {
 
 struct ScreensaverOverlay: View {
     @EnvironmentObject private var model: AppModel
+    @State private var appearedAt = Date()
+
+    private static let cardSeconds = 15
+    private static let anchorSeconds = 45
+    // Clockwise: a card lingers one zone, then travels to the next. Long
+    // static pixels are what burn into an OLED; this never parks one.
+    private static let anchors: [Alignment] = [.topLeading, .topTrailing, .bottomTrailing, .bottomLeading]
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
+            let elapsed = context.date.timeIntervalSince(appearedAt)
+            let cards = BodyAmbient.cards(ring: model.ring,
+                                          presentation: model.presentation.snapshot,
+                                          socketConnected: model.body.connectionState == .connected,
+                                          now: context.date)
+            let cardIndex = cards.isEmpty ? 0 : Int(elapsed / Double(Self.cardSeconds)) % cards.count
+            let anchorIndex = Int(elapsed / Double(Self.anchorSeconds)) % Self.anchors.count
+            let card = cardIndex < cards.count ? cards[cardIndex]
+                                               : BodyAmbient.Card(title: "Quiet — online", detail: nil)
             ZStack {
                 Color.black.ignoresSafeArea()
-                VStack(spacing: 18) {
-                    Text(context.date, style: .time)
-                        .font(.system(size: 64, weight: .thin, design: .rounded))
-                        .foregroundStyle(KairoTheme.chrome.opacity(0.45))
-                    if model.body.screensaverActive {
-                        KairoRingMetalView(state: {
-                            var state = model.renderState()
-                            state.sleeping = true
-                            state.intensity = 0.25
-                            state.energy = 0
-                            state.emitterLevels = Array(repeating: 0.02, count: 12)
-                            return state
-                        }(), framesPerSecond: 1)
-                        .frame(width: 180, height: 180)
+                KairoRingMetalView(state: model.ambientRingState(now: context.date),
+                                   framesPerSecond: 2)
+                    .frame(width: 190, height: 190)
+                    .offset(x: CGFloat(26 * sin(elapsed / 23)),
+                            y: CGFloat(18 * sin(elapsed / 31 + 1)))
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(card.title)
+                        .font(.system(size: 40, weight: .thin, design: .rounded))
+                        .foregroundStyle(KairoTheme.chrome.opacity(0.75))
+                    if let detail = card.detail {
+                        Text(detail)
+                            .font(.system(size: 15, weight: .medium, design: .rounded))
+                            .foregroundStyle(KairoTheme.faint.opacity(0.8))
                     }
+                    Text(context.date, style: .time)
+                        .font(.system(size: 22, weight: .thin, design: .rounded))
+                        .foregroundStyle(KairoTheme.faint.opacity(0.4))
+                        .padding(.top, 6)
                 }
+                .padding(.horizontal, 44)
+                .padding(.vertical, 36)
+                .frame(maxWidth: .infinity, maxHeight: .infinity,
+                       alignment: Self.anchors[anchorIndex])
+                .id(cardIndex)
+                .transition(.opacity)
             }
+            .animation(.easeInOut(duration: 1.2), value: cardIndex)
+            .animation(.easeInOut(duration: 2.5), value: anchorIndex)
             .allowsHitTesting(true)
             .onTapGesture { model.body.noteUserActivity() }
         }

@@ -213,6 +213,19 @@ final class AppModel: ObservableObject {
         return state
     }
 
+    /// The dozing body stays alive: the ring keeps breathing in Kairo's real
+    /// mood colours with damped motion, so the screensaver reads as presence,
+    /// not a wallpaper that stopped working.
+    func ambientRingState(now: Date = Date()) -> RingRenderState {
+        var state = renderState(now: now)
+        state.emitterLevels = state.emitterLevels.map { max(0.04, $0 * 0.55) }
+        state.energy *= 0.6
+        state.breath = max(0.2, state.breath)
+        state.intensity = min(max(state.intensity, 0.35), 0.6)
+        state.sleeping = false
+        return state
+    }
+
     /// Kairo being actually busy anywhere keeps the appliance awake; the Dot's
     /// fresh live phase counts, a bare heartbeat never does.
     private func awakeBecauseKairoIsActive() -> Bool {
