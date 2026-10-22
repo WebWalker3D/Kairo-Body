@@ -62,10 +62,12 @@ On a fresh install, setup asks for:
 - the **body sensory token** — the `/v1/body/ws` socket and pairing redeem;
 - the **shared Echo session id** — the conversation the Dot is holding.
 
-All are stored only in the iPad's Keychain / UserDefaults. Replacing an
-installed body app inherits them, so the update path is zero-touch. The
-physical Dot's endpoint id (`echomuse-rs03qr`) is a fixed deployment
-constant in `AppConfig`, not personal data.
+All are stored only in the iPad's Keychain / UserDefaults. Setup can be
+deferred once ("Not now"); the sheet never reappears unasked — Settings ›
+Credential setup is the re-entry path. Replacing an installed body app
+inherits everything, so the update path is zero-touch. The physical
+Dot's endpoint id (`echomuse-rs03qr`) is a fixed deployment constant in
+`AppConfig`, not personal data.
 
 ## Building
 
