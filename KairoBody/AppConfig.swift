@@ -8,9 +8,15 @@ import Foundation
 /// session (same UserDefaults key), so a replacement never shows setup.
 enum AppConfig {
     // Connection identity is fixed by the deployment, never entered on device.
+    // The paths are public-topology facts: connect.kairo.icu routes /api/* and
+    // /ws/body to the agent API, but the sensory socket and pairing redemption
+    // live in the memory service, which nginx exposes under the /memory/
+    // prefix (prefix stripped). The previously installed body app connected to
+    // wss://connect.kairo.icu/memory/v1/body/ws; the bare /v1/body/ws path
+    // falls through to the agent API and is rejected with 401.
     static let agentOrigin = "https://connect.kairo.icu"
-    static let bodySocketURL = "wss://connect.kairo.icu/v1/body/ws"
-    static let bodyPairingRedeemURL = "https://connect.kairo.icu/v1/body/pairing/redeem"
+    static let bodySocketURL = "wss://connect.kairo.icu/memory/v1/body/ws"
+    static let bodyPairingRedeemURL = "https://connect.kairo.icu/memory/v1/body/pairing/redeem"
     static let dotObserverURL = "wss://connect.kairo.icu/ws/body"
     static let bodyID = "ipad-pro-2017"
 
