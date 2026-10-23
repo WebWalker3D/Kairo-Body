@@ -18,6 +18,9 @@ final class DotObserverClient: ObservableObject {
     private var generation = 0
     private var heartbeatSequence = 0
     private let instanceID = "ipad-dot-\(UUID().uuidString.lowercased())"
+    /// Bounded like the sensory link: no silent URLSession retries, finite
+    /// resource timeouts, and one session for the client's whole life.
+    private let session = URLSession(configuration: TransportConfig.websocket())
 
     func follow(token: String, foreground: Bool) {
         // Re-following with the same token while already running is a no-op:
@@ -32,7 +35,7 @@ final class DotObserverClient: ObservableObject {
             while !Task.isCancelled {
                 guard let self, current == self.generation else { return }
                 guard let url = URL(string: AppConfig.dotObserverURL) else { return }
-                let task = URLSession.shared.webSocketTask(with: url, protocols: ["novexai", token])
+                let task = session.webSocketTask(with: url, protocols: ["novexai", token])
                 self.socket = task
                 task.resume()
                 do {
@@ -152,6 +155,10 @@ final class DotObserverClient: ObservableObject {
 
     private func send(_ payload: [String: Any], on task: URLSessionWebSocketTask) async throws {
         let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
-        try await task.send(.string(String(decoding: data, as: UTF8.self)))
+        // Bounded like the sensory link: a stalled write is a dead link, and
+        // the heartbeat loop must stay free to notice.
+        try await StalledOperation.call(10) { [task] in
+            try await task.send(.string(String(decoding: data, as: UTF8.self)))
+        }
     }
 }

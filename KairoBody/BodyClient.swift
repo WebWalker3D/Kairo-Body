@@ -73,6 +73,7 @@ final class BodyClient: ObservableObject {
     private var capabilitySentAt: [Int: Date] = [:]
     private var acknowledgedCapabilitySequence = -1
     private var receivedDisplayCommandOnTransport = false
+    private var linkActivity = LinkActivity()
 
     let sessionID = UUID().uuidString.lowercased()
 
@@ -164,7 +165,11 @@ final class BodyClient: ObservableObject {
         let alive = await LivenessProbe.answered(within: timing.livenessDeadline) {
             try await socket.sendPing()
         }
-        guard gate.isCurrent(transport), !alive else { return }
+        guard gate.isCurrent(transport) else { return }
+        if alive {
+            linkActivity.note()
+            return
+        }
         handleDisconnect(BodyLinkError.noPong, transport: transport)
     }
 
@@ -177,6 +182,12 @@ final class BodyClient: ObservableObject {
                 guard !Task.isCancelled, let self, self.gate.isCurrent(transport) else { return }
                 // Heartbeats run only while the app is active; iOS suspends it otherwise.
                 guard self.isForeground else { continue }
+                // The supervisor needs no cooperation from a dead peer: even if
+                // pings never call back, currency tells the truth.
+                if self.linkActivity.stale(at: Date(), after: self.timing.activityStale) {
+                    self.handleDisconnect(BodyLinkError.noActivity, transport: transport)
+                    return
+                }
                 await self.probe(socket, transport: transport)
             }
         }
@@ -400,6 +411,7 @@ final class BodyClient: ObservableObject {
         capabilitySentAt.removeAll()
         acknowledgedCapabilitySequence = -1
         receivedDisplayCommandOnTransport = false
+        linkActivity.reset()
         socket.resume()
 
         receiveTask?.cancel()
@@ -415,6 +427,7 @@ final class BodyClient: ObservableObject {
             self.connectionState = .connected
             self.lastError = nil
             self.reconnectAttempt = 0
+            self.linkActivity.note()
             self.startLiveness(socket, transport: transport)
             await self.sendHello()
             await self.sendCodable(DisplayStateRequest(bodyID: AppConfig.bodyID,
@@ -436,6 +449,7 @@ final class BodyClient: ObservableObject {
                 @unknown default: continue
                 }
                 guard gate.isCurrent(transport), !Task.isCancelled else { return }
+                linkActivity.note()
                 await handleIncoming(data)
             } catch {
                 handleDisconnect(error, transport: transport)
@@ -508,12 +522,24 @@ final class BodyClient: ObservableObject {
                 lastError = "Outbound message exceeded 2.5 MB cap"
                 return false
             }
-            try await socket.send(.data(data))
+            try await transmit(socket, data)
             return true
         } catch {
             handleDisconnect(error, transport: transport)
             return false
         }
+    }
+
+    /// One bounded write on the live socket. A stalled `URLSessionWebSocketTask.send`
+    /// must never hold a caller suspended forever: the deadline throws, the
+    /// caller's catch tears the transport down, and the reconnect loop replaces it.
+    /// A successful write is the strongest evidence the link is current, so it
+    /// advances the supervisor.
+    private func transmit(_ socket: BodySocket, _ data: Data) async throws {
+        try await StalledOperation.call(timing.sendDeadline) { [socket] in
+            try await socket.send(.data(data))
+        }
+        linkActivity.note()
     }
 
     func sendCapabilities() async {
@@ -536,7 +562,7 @@ final class BodyClient: ObservableObject {
             let data = try JSONSerialization.data(withJSONObject: message, options: [.sortedKeys])
             capabilitySentAt = capabilitySentAt.filter { Date().timeIntervalSince($0.value) < 45 }
             capabilitySentAt[seq] = Date()
-            try await socket.send(.data(data))
+            try await transmit(socket, data)
         } catch { handleDisconnect(error, transport: transport) }
     }
 
@@ -748,7 +774,7 @@ final class BodyClient: ObservableObject {
             "bodyID": AppConfig.bodyID, "sessionID": sessionID, "commandID": event.commandID,
             "sequence": event.sequence, "phase": event.phase.rawValue, "detail": event.detail]
         do {
-            try await socket.send(.data(JSONSerialization.data(withJSONObject: message, options: [.sortedKeys])))
+            try await transmit(socket, JSONSerialization.data(withJSONObject: message, options: [.sortedKeys]))
         } catch { handleDisconnect(error, transport: transport) }
     }
 
@@ -783,9 +809,9 @@ final class SessionBoundSocket: BodySocket {
     private let task: URLSessionWebSocketTask
 
     static func open(_ request: URLRequest) -> BodySocket {
-        let config = URLSessionConfiguration.default
-        config.waitsForConnectivity = true
-        let session = URLSession(configuration: config)
+        // No silent URLSession retries: a failing handshake errors into our
+        // receive loop, which schedules exactly one bounded reconnect.
+        let session = URLSession(configuration: TransportConfig.websocket())
         return SessionBoundSocket(session: session, task: session.webSocketTask(with: request))
     }
 
@@ -818,10 +844,22 @@ struct BodyLinkTiming {
     var livenessInterval: Double = LivenessSchedule.interval
     var livenessDeadline: Double = LivenessSchedule.deadline
     var openingDeadline: Double = 15
+    /// No single socket write may outlive this; a stalled send is a dead link.
+    var sendDeadline: Double = 10
+    /// The supervisor tolerates this much silence on a "connected" transport.
+    /// It must stay strictly more patient than the ping probe, which answers
+    /// within livenessInterval + livenessDeadline.
+    var activityStale: Double = 60
     var reconnectDelay: (Int) -> Double = { attempt in min(pow(2.0, Double(attempt - 1)), 30.0) }
 }
 
 enum BodyLinkError: LocalizedError {
     case noPong
-    var errorDescription: String? { "Kairo's body link stopped answering; reconnecting." }
+    case noActivity
+    var errorDescription: String? {
+        switch self {
+        case .noPong: return "Kairo's body link stopped answering; reconnecting."
+        case .noActivity: return "Kairo's body link stopped carrying data; reconnecting."
+        }
+    }
 }

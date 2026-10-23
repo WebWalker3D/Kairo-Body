@@ -20,7 +20,7 @@ final class KairoHTTP {
     private let session: URLSession
     private let responseLimit: Int
 
-    init(session: URLSession = .shared, responseLimit: Int = 4 * 1024 * 1024) {
+    init(session: URLSession = TransportConfig.sharedSession, responseLimit: Int = 4 * 1024 * 1024) {
         self.session = session
         self.responseLimit = responseLimit
     }
