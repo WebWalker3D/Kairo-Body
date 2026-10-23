@@ -63,7 +63,7 @@ final class SelfHealingTests: XCTestCase {
     func testDeadlineCancelsTheStalledOperation() async {
         let cancelled = Flag()
         _ = await StalledOperation.outcome(0.05) {
-            withTaskCancellationHandler {
+            await withTaskCancellationHandler {
                 try? await Task.sleep(nanoseconds: 30_000_000_000)
             } onCancel: {
                 cancelled.set()
@@ -84,8 +84,9 @@ final class SelfHealingTests: XCTestCase {
                 return "late"
             }
             XCTFail("expected TimedOut")
-        } catch is StalledOperation.TimedOut { break }
-        catch { XCTFail("expected StalledOperation.TimedOut, got \(type(of: error))") }
+        } catch is StalledOperation.TimedOut {
+            // the deadline is the expected outcome
+        } catch { XCTFail("expected StalledOperation.TimedOut, got \(type(of: error))") }
     }
 
     // MARK: Link currency supervisor
