@@ -109,7 +109,15 @@ extension SleepWakeTests {
             WakeFixtureProtocol.inspect = nil
         }
         AppConfig.agentToken = "test-agent-only"
-        try AppConfig.saveOwnerProof("test-device-only")
+        do {
+            try AppConfig.saveOwnerProof("test-device-only")
+        } catch {
+            #if targetEnvironment(simulator)
+            throw XCTSkip("This unsigned simulator cannot write Keychain fixtures; paired transport requires signed-device verification.")
+            #else
+            throw error
+            #endif
+        }
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [WakeFixtureProtocol.self]
         let http = KairoHTTP(session: URLSession(configuration: config))
