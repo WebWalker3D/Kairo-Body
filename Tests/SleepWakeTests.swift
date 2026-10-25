@@ -91,7 +91,7 @@ private final class WakeFixtureProtocol: URLProtocol {
             let (status, body) = try Self.inspect!(request)
             let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: JSONSerialization.data(withJSONObject: body))
+            client?.urlProtocol(self, didLoad: try JSONSerialization.data(withJSONObject: body))
             client?.urlProtocolDidFinishLoading(self)
         } catch { client?.urlProtocol(self, didFailWithError: error) }
     }
