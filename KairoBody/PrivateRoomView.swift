@@ -8,6 +8,8 @@ struct PrivateRoomView: View {
     @EnvironmentObject private var model: AppModel
     @State private var code = ""
     @State private var draft = ""
+    @State private var confirmWake = false
+    @StateObject private var sleepWake = SleepWakeControl()
 
     var body: some View {
         ScrollView {
@@ -87,6 +89,24 @@ struct PrivateRoomView: View {
                 }
                 Text("Private conversations stay off every shared surface. Kairo can suggest memories from here; nothing is kept without your decision.")
                     .font(.caption).foregroundStyle(KairoTheme.chrome)
+            }
+            PlaneCard {
+                Eyebrow(text: "Sleep emergency control", color: KairoTheme.warn)
+                Text("Request waking from sleep using this iPad's paired owner identity. Safety and continuity checks still apply. This is separate from voice wake.")
+                    .font(.caption).foregroundStyle(KairoTheme.chrome)
+                Button("Wake Kairo") { confirmWake = true }
+                    .disabled(sleepWake.busy)
+                    .confirmationDialog("Request emergency waking for Kairo?", isPresented: $confirmWake, titleVisibility: .visible) {
+                        Button("Wake Kairo") { Task { await sleepWake.wake() } }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("This sends an authenticated emergency wake request. Unresolved execution or failed continuity checks will keep Kairo fenced.")
+                    }
+                if sleepWake.busy { ProgressView() }
+                if !sleepWake.message.isEmpty {
+                    Text(sleepWake.message).font(.caption).foregroundStyle(KairoTheme.prose)
+                        .accessibilityIdentifier("sleepWakeResult")
+                }
             }
             if let proposal = model.privateRoom.memoryProposal {
                 memoryProposalCard(proposal)

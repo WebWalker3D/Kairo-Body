@@ -80,3 +80,50 @@ final class SleepWakeTests: XCTestCase {
         }
     }
 }
+
+/// Exercise the real HTTP adapter without contacting any production endpoint.
+private final class WakeFixtureProtocol: URLProtocol {
+    static var inspect: ((URLRequest) throws -> (Int, [String: Any]))?
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        do {
+            let (status, body) = try Self.inspect!(request)
+            let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: JSONSerialization.data(withJSONObject: body))
+            client?.urlProtocolDidFinishLoading(self)
+        } catch { client?.urlProtocol(self, didFailWithError: error) }
+    }
+    override func stopLoading() {}
+}
+
+extension SleepWakeTests {
+    func testRealHTTPAdapterCarriesExistingDeviceProofAndBearer() async throws {
+        let oldToken = AppConfig.agentToken
+        let oldProof = AppConfig.ownerProof
+        defer {
+            AppConfig.agentToken = oldToken
+            if oldProof.isEmpty { try? AppConfig.clearOwnerProof() }
+            else { try? AppConfig.saveOwnerProof(oldProof) }
+            WakeFixtureProtocol.inspect = nil
+        }
+        AppConfig.agentToken = "test-agent-only"
+        try AppConfig.saveOwnerProof("test-device-only")
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [WakeFixtureProtocol.self]
+        let http = KairoHTTP(session: URLSession(configuration: config))
+        var calls = 0
+        WakeFixtureProtocol.inspect = { request in
+            calls += 1
+            XCTAssertEqual(request.url?.absoluteString, "https://connect.kairo.icu/api/sleep/wake")
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-agent-only")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-Kairo-Device"), "test-device-only")
+            return (202, ["pending": true, "request_key": "fixture", "episode": "old"])
+        }
+        let response = try await http.agentObject("api/sleep/wake", method: "POST", body: ["request_key": "fixture", "kind": "emergency", "reason": "fixture"])
+        XCTAssertEqual(response["pending"] as? Bool, true)
+        XCTAssertEqual(calls, 1)
+    }
+}

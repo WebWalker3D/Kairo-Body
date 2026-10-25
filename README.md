@@ -5,7 +5,7 @@ Kairo's iPad body endpoint: a dependency-free iPadOS 17 SwiftUI + Metal app
 `icu.kairo.body`. This public repository is the source of record for the
 installed body app; the server lives in the private novexai repository.
 
-Kairo Body 2.0 (v2.0.4, build 54) replaces the 1.0.x MVP line in place: same
+Kairo Body 2.0 (v2.0.5, build 55) replaces the 1.0.x MVP line in place: same
 bundle id, same Keychain service/accounts (`icu.kairo.body` bearer-token /
 agent-token, `icu.kairo.body.owner` paired-owner-proof), same UserDefaults
 identity (`echoSessionID` and friends), endpoint id `ipad-pro-2017`. A
@@ -46,6 +46,9 @@ and shared Echo session — the setup screen never appears on an updated device.
   owner-private session (`client: ipad_private`) kept out of the shared
   transcript; memory proposals pause the job until an explicit Keep/Dismiss
   on this device.
+  **Wake Kairo** is a separate confirmed emergency sleep-wake action. It uses
+  the existing paired Agent HTTP path, requires no inference, and distinguishes
+  completed receipts from pending, denied and unconfirmed outcomes.
 - **Body** — sensory link state, endpoint id, capability availability versus
   permissions, and the last frame Kairo actually ingested.
 - **Settings** — appliance preferences, plus credential setup on fresh
@@ -73,7 +76,7 @@ Dot's endpoint id (`echomuse-rs03qr`) is a fixed deployment constant in
 
 GitHub Actions (`build-ipa.yml`) runs the unit suite on an iPad simulator,
 captures visual smoke screenshots, builds the unsigned device app, asserts
-bundle id, version 2.0.4/build 54, permission strings and that no personal
+bundle id, version 2.0.5/build 55, permission strings and that no personal
 provisioning was baked, then uploads `KairoBody.ipa`.
 
 On a Mac directly:
