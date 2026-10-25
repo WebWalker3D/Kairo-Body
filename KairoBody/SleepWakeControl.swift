@@ -8,12 +8,12 @@ final class SleepWakeControl: ObservableObject {
     @Published private(set) var busy = false
     @Published private(set) var message = ""
     private let defaults: UserDefaults
-    private let paired: () -> Bool
+    private let paired: @MainActor () -> Bool
     private let request: (String, String, [String: Any]) async throws -> [String: Any]
     private let storageKey = "sleepEmergencyWakeRequestKey"
 
     init(defaults: UserDefaults = .standard,
-         paired: @escaping () -> Bool = { PairingClient.validCredential(AppConfig.ownerProof) },
+         paired: @escaping @MainActor () -> Bool = { PairingClient.validCredential(AppConfig.ownerProof) },
          request: @escaping (String, String, [String: Any]) async throws -> [String: Any] = { path, method, body in
              try await KairoHTTP().agentObject(path, method: method, body: body, timeout: 20)
          }) {
