@@ -135,7 +135,7 @@ stacks it. Every page uses the same quieter navigation and typography.
 Kairo-selected iPad output now follows `metadata_json.surface_output_target`
 from a completed job. Display output appears above any destination and must be
 acknowledged by the mounted view before a successful delivery receipt. Sensory
-display commands advertise availability only while the actual Stage is visible.
+display commands use the same mounted root panel, including state-only commands.
 Explicit speech advertises presence before submission. Existing claims,
 authorization and durable idempotency are retained.
 

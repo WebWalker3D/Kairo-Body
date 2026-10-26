@@ -35,6 +35,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var stageDisplayID = UUID()
     private var acknowledgedDisplayID: UUID?
     private var rootSurfaceVisible = false
+    private let surfaceUnobscured: @MainActor () -> Bool
     private var ringTask: Task<Void, Never>?
     private var invitationTask: Task<Void, Never>?
     private var contactCounter = 0
@@ -50,16 +51,21 @@ final class AppModel: ObservableObject {
         var id: String { rawValue }
     }
 
-    init() {
+    init(deliveryRequest: SurfaceDeliveryClient.Request? = nil,
+         surfaceUnobscured: @escaping @MainActor () -> Bool = { SurfaceVisibility.isUnobscured() }) {
+        self.surfaceUnobscured = surfaceUnobscured
         AppConfig.provisionOnFirstLaunch()
         let http = KairoHTTP()
         camera = CameraCaptureService()
         speech = SpeechService(http: http)
         body = BodyClient(settings: settings, sensors: sensors, speech: speech, camera: camera)
         conversation = ConversationClient(settings: settings, speech: speech, http: http)
-        surfaceDelivery = SurfaceDeliveryClient(request: { path, body in
+        surfaceDelivery = SurfaceDeliveryClient(request: deliveryRequest ?? { path, body in
             try await http.agentObject(path, method: body == nil ? "GET" : "POST", body: body)
         })
+        body.applyDisplay = { [weak self] state in
+            await self?.applyStageDisplay(state.surfaceText) ?? false
+        }
         surfaceDelivery.display = { [weak self] text in await self?.applyStageDisplay(text) ?? false }
         surfaceDelivery.speak = { [weak self] text, event in self?.speech.speak(text, onEvent: event) ?? false }
         surfaceDelivery.stopSpeech = { [weak self] in self?.speech.stop() }
@@ -305,11 +311,11 @@ final class AppModel: ObservableObject {
     }
 
     func updateSurfaceVisibility() {
-        let visible = rootSurfaceVisible && isForeground && !body.screensaverActive
+        let visible = rootSurfaceVisible && isForeground && !body.screensaverActive && surfaceUnobscured()
         surfaceDelivery.setDisplayVisible(visible)
-        // Sensory display commands update the stage's headline/ring. Other
-        // tabs are not that surface; the claimed output overlay is separate.
-        body.setDisplayVisible(visible && destination == .stage)
+        // Both sensory commands and settled output use the root display
+        // panel, so scrolling or changing destination cannot hide their act.
+        body.setDisplayVisible(visible)
     }
 
     func pairingChanged() {
@@ -317,7 +323,7 @@ final class AppModel: ObservableObject {
         feed.followAllSurfaces(foreground: isForeground)
         systems.start(paired: pairing.isPaired, foreground: isForeground)
         settingsChanged()
-        if !pairing.isPaired { privateRoom.stop(); clearStageDisplay() }
+        if !pairing.isPaired { surfaceDelivery.stop(); privateRoom.stop(); clearStageDisplay() }
     }
 
     func displayCommand(_ text: String) {
@@ -327,17 +333,17 @@ final class AppModel: ObservableObject {
     }
 
     func acknowledgeStageDisplay(_ text: String) {
-        guard text == stageDisplayText, rootSurfaceVisible, isForeground, !body.screensaverActive else { return }
+        guard text == stageDisplayText, rootSurfaceVisible, isForeground, !body.screensaverActive, surfaceUnobscured() else { return }
         acknowledgedDisplayID = stageDisplayID
     }
 
     private func applyStageDisplay(_ text: String) async -> Bool {
-        guard rootSurfaceVisible, isForeground, !body.screensaverActive else { return false }
+        guard rootSurfaceVisible, isForeground, !body.screensaverActive, surfaceUnobscured() else { return false }
         displayCommand(text)
         let id = stageDisplayID
         for _ in 0..<40 {
             guard rootSurfaceVisible, isForeground, !body.screensaverActive,
-                  id == stageDisplayID, !Task.isCancelled else { return false }
+                  id == stageDisplayID, !Task.isCancelled, surfaceUnobscured() else { return false }
             if acknowledgedDisplayID == id { return true }
             do { try await Task.sleep(for: .milliseconds(50)) } catch { return false }
         }

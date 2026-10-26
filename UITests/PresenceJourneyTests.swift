@@ -18,6 +18,14 @@ final class PresenceJourneyTests: XCTestCase {
         app.buttons["Private"].tap()
         XCTAssertTrue(app.staticTexts["Private room"].waitForExistence(timeout: 5))
         capture("Private-room")
+        app.buttons["Settings"].tap()
+        let transcriptSwitch = app.switches["Show the shared conversation"]
+        XCTAssertTrue(transcriptSwitch.waitForExistence(timeout: 5))
+        if transcriptSwitch.value as? String == "1" { transcriptSwitch.tap() }
+        app.buttons["Presence"].tap()
+        XCTAssertTrue(app.staticTexts["Shared conversation hidden"].waitForExistence(timeout: 5))
+        app.buttons["Settings"].tap()
+        if transcriptSwitch.value as? String == "0" { transcriptSwitch.tap() }
     }
 
     @MainActor

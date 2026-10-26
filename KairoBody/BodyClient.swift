@@ -20,7 +20,12 @@ final class BodyClient: ObservableObject {
         var state = "awaiting state"
         var headline = "Kairo"
         var detail = "Waiting for Kairo's current expression"
+        var surfaceText: String {
+            [headline, state.capitalized, detail].filter { !$0.isEmpty }.joined(separator: "\n")
+        }
     }
+
+    var applyDisplay: (DisplayState) async -> Bool = { _ in false }
 
     @Published private(set) var connectionState: ConnectionState = .stopped
     @Published private(set) var lastError: String?
@@ -651,9 +656,9 @@ final class BodyClient: ObservableObject {
                 case .dark: break
                 }
             }
-            await Task.yield()
-            let visible = isForeground && displayVisible && !screensaverActive
-            await commandResult(id: commandID, ok: visible, detail: visible ? "display updated visibly" : "body display became obscured")
+            let applied = await applyDisplay(display)
+            let visible = applied && isForeground && displayVisible && !screensaverActive
+            await commandResult(id: commandID, ok: visible, detail: visible ? "display updated visibly" : "body display did not acknowledge visible output")
 
         case "capture_camera":
             guard settings.allowRemoteCamera else {

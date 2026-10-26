@@ -268,6 +268,7 @@ struct InvitationCard: View {
 }
 
 struct ScreensaverOverlay: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var model: AppModel
     @State private var appearedAt = Date()
 
@@ -284,14 +285,14 @@ struct ScreensaverOverlay: View {
                 let elapsed = context.date.timeIntervalSince(appearedAt)
                 let size = geo.size
                 let center = CGPoint(x: size.width / 2, y: size.height / 2)
-                let theta = 2 * Double.pi * elapsed / Self.orbitSeconds
+                let theta = reduceMotion ? 0 : 2 * Double.pi * elapsed / Self.orbitSeconds
                 let orbitX = size.width * 0.23
                 let orbitY = size.height * 0.17
                 let cards = cardsFor(now: context.date)
                 ZStack {
                     Color.black.ignoresSafeArea()
                     KairoRingMetalView(state: model.ambientRingState(now: context.date),
-                                       framesPerSecond: 10)
+                                       framesPerSecond: 10, reduceMotion: reduceMotion)
                         .frame(width: min(230, size.width * 0.24, size.height * 0.30),
                                height: min(230, size.width * 0.24, size.height * 0.30))
                         .position(x: center.x + orbitX * CGFloat(cos(theta)),

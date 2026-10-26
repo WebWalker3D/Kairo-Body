@@ -23,7 +23,17 @@ struct TranscriptView: View {
             if let recovery = model.conversation.pendingRecovery {
                 recoveryBanner(recovery)
             }
-            turnsList
+            if model.settings.echoTranscriptVisible {
+                turnsList
+            } else {
+                VStack(spacing: 12) {
+                    Image(systemName: "eye.slash").font(.title2)
+                    Text("Shared conversation hidden")
+                    Text("You can show it again in Settings.").font(.caption)
+                }
+                .foregroundStyle(KairoTheme.chrome)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
             if let invitation = model.invitations.invitation {
                 InvitationCard(invitation: invitation)
                     .padding(.horizontal, 18).padding(.bottom, 6)

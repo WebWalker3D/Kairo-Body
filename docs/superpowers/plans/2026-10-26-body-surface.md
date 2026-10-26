@@ -47,3 +47,13 @@ Interfaces: use verified existing read contracts only; preserve job claims/resul
 
 ## Execution ledger
 User explicitly delegated choices and requested implementation; proceed inline without design or plan approval questions. Main-only instructions override skill worktree default. No novexai source changes are planned. Baseline integration review reads server continuity separately; source documentation alone cannot establish live state.
+
+### Review fix pass
+- Owner removal invalidates in-flight claims before clearing displayed content.
+- Actual UIKit presentation-tree obscuration participates in availability and display acknowledgment, including photo pickers and alerts.
+- Sensory display commands use the same root panel and await mounted acknowledgment, solving both state-only commands and scrolled-away Stage content.
+- Shared-conversation preference now governs Stage previews and transcript visibility; stale active turns are labeled last received.
+- Reduce Motion applies to ambient ring and screensaver orbit as well as Stage.
+- Ruling: root panel replaces the initial stage-only sensory visibility choice because actual acknowledged output remains visible across navigation and scrolling.
+- Ruling: physical iPad sensor/audio/performance acceptance remains a device-side validation; simulator evidence cannot establish it.
+- Baseline GPU test observed 128-byte storage versus expected304, missing inline data; 113 tests executed, one existing unsigned-Keychain fixture skipped. Hosted run was cancelled after the test failure log had completed, not a passing baseline claim.

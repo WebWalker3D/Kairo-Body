@@ -19,7 +19,16 @@ struct PresenceWorkspace: View {
                     .font(.system(size: 9, design: .monospaced))
                     .foregroundStyle(KairoTheme.faint)
             }
-            activityCard
+            if model.settings.echoTranscriptVisible {
+                activityCard
+            } else {
+                PlaneCard {
+                    Label("Shared conversation hidden", systemImage: "eye.slash")
+                        .font(.subheadline).foregroundStyle(KairoTheme.chrome)
+                    Text("Change this in Settings when you want it on this surface.")
+                        .font(.caption).foregroundStyle(KairoTheme.faint)
+                }
+            }
             connections
             RestStatusCard()
             if let state = model.feed.liveState, model.feed.connectionTrouble == nil {
@@ -47,9 +56,9 @@ struct PresenceWorkspace: View {
     private var activityCard: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Image(systemName: model.feed.processing ? "waveform.path" : "quote.bubble")
+                Image(systemName: PresencePreviewPolicy.isWorking(active: model.feed.processing, feedFresh: feedFresh) ? "waveform.path" : "quote.bubble")
                     .foregroundStyle(KairoTheme.primary)
-                Eyebrow(text: model.feed.processing ? "In motion" : "Conversation", color: KairoTheme.primary)
+                Eyebrow(text: PresencePreviewPolicy.isWorking(active: model.feed.processing, feedFresh: feedFresh) ? "In motion" : "Conversation", color: KairoTheme.primary)
                 Spacer()
                 Image(systemName: "arrow.up.right").font(.caption).foregroundStyle(KairoTheme.faint)
             }
@@ -61,11 +70,11 @@ struct PresenceWorkspace: View {
                 HStack {
                     Text(turn.sourceCaption).lineLimit(1)
                     Spacer()
-                    Text(turn.active ? "WORKING" : "LAST RECEIVED")
+                    Text(PresencePreviewPolicy.isWorking(active: turn.active, feedFresh: feedFresh) ? "WORKING" : "LAST RECEIVED")
                 }
                 .font(.system(size: 9, weight: .medium, design: .monospaced))
                 .foregroundStyle(KairoTheme.chrome)
-                if let tool = turn.toolActivity.last, turn.active {
+                if let tool = turn.toolActivity.last, turn.active, feedFresh {
                     Label(tool, systemImage: "bolt.horizontal")
                         .font(.caption2).foregroundStyle(KairoTheme.mind).lineLimit(2)
                 }
