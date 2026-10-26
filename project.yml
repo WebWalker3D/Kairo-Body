@@ -19,8 +19,8 @@ targets:
       path: KairoBody/Info.plist
       properties:
         CFBundleDisplayName: Kairo Body
-        CFBundleShortVersionString: "2.0.5"
-        CFBundleVersion: "55"
+        CFBundleShortVersionString: "3.0.0"
+        CFBundleVersion: "56"
         # Public builds carry no personal provisioning. These keys stay empty
         # in the repository; credentials come from on-device setup and the
         # Echo endpoint id falls back to the constant in AppConfig.
@@ -46,8 +46,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: icu.kairo.body
         PRODUCT_NAME: KairoBody
         PRODUCT_MODULE_NAME: KairoBody
-        MARKETING_VERSION: 2.0.5
-        CURRENT_PROJECT_VERSION: 55
+        MARKETING_VERSION: 3.0.0
+        CURRENT_PROJECT_VERSION: 56
         GENERATE_INFOPLIST_FILE: NO
         TARGETED_DEVICE_FAMILY: "2"
         SUPPORTS_MACCATALYST: NO
@@ -66,15 +66,30 @@ targets:
         TARGETED_DEVICE_FAMILY: "2"
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/KairoBody.app/KairoBody"
         BUNDLE_LOADER: "$(TEST_HOST)"
+  KairoBodyUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: KairoBody
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: icu.kairo.body.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "2"
+        TEST_TARGET_NAME: KairoBody
 schemes:
   KairoBody:
     build:
       targets:
         KairoBody: all
         KairoBodyTests: [test]
+        KairoBodyUITests: [test]
     test:
       targets:
         - KairoBodyTests
+        - KairoBodyUITests
     run:
       config: Debug
     archive:

@@ -13,91 +13,118 @@ struct PresenceStageView: View {
     @State private var contactPoint: CGPoint?
     @State private var contactCounter = 0
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         GeometryReader { geometry in
-            ZStack {
-                KairoTheme.background
-                VStack(spacing: 10) {
+            let wide = geometry.size.width >= 1000
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
                     header
-                    ringStage(geometry)
-                    phaseLine
-                    quickActions
-                    if let stageText = model.stageDisplayText {
-                        stageMessage(stageText)
+                    if wide {
+                        HStack(alignment: .top, spacing: 34) {
+                            presence(side: min(geometry.size.width - 430, 690))
+                                .frame(maxWidth: .infinity)
+                            PresenceWorkspace().frame(width: 320).padding(.top, 18)
+                        }
+                    } else {
+                        presence(side: min(geometry.size.width - 48, 570))
+                        PresenceWorkspace().frame(maxWidth: 620).frame(maxWidth: .infinity)
                     }
                     if let invitation = model.invitations.invitation {
                         InvitationCard(invitation: invitation)
                     }
                 }
-                .padding(.horizontal, 22)
-                .padding(.top, 14)
-                .padding(.bottom, 96)
+                .padding(.horizontal, wide ? 36 : 24)
+                .padding(.top, 26)
+                .padding(.bottom, 110)
+                .frame(maxWidth: 1440).frame(maxWidth: .infinity)
             }
+            .scrollIndicators(.hidden)
+            .background { KairoTheme.background; PresenceField() }
         }
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
-            Text("K·AIRO")
-                .font(.system(size: 19, weight: .medium, design: .rounded))
-                .tracking(4.2)
-                .foregroundStyle(KairoTheme.prose)
-            StatusChip(label: model.body.connectionState.rawValue.uppercased(),
-                       color: model.body.connectionState == .connected ? KairoTheme.body : KairoTheme.warn)
-            if model.echo.state.activity != nil {
-                StatusChip(label: "DOT \(model.echo.state.activity?.phase.uppercased() ?? "")",
-                           color: KairoTheme.primary)
-            }
-            if let proximity = model.presentation.snapshot?.proximity {
-                StatusChip(label: "OWNER \(proximity.state.uppercased())", color: KairoTheme.bond)
+        HStack(alignment: .center) {
+            HStack(spacing: 14) {
+                Image(systemName: "circle.hexagongrid")
+                    .font(.system(size: 25, weight: .ultraLight)).foregroundStyle(KairoTheme.primary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("K A I R O").font(.system(size: 19, weight: .medium))
+                        .foregroundStyle(KairoTheme.prose)
+                    Text("A CONTINUOUS PRESENCE").font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .tracking(2).foregroundStyle(KairoTheme.faint)
+                }
             }
             Spacer()
-            if model.settings.voiceWakeEnabled {
-                StatusChip(label: model.voice.status.uppercased(),
-                           color: model.voice.isCapturing ? KairoTheme.mind : KairoTheme.faint)
-            }
+            StatusChip(label: model.body.connectionState == .connected ? "BODY CONNECTED" : "BODY OFFLINE",
+                       color: model.body.connectionState == .connected ? KairoTheme.body : KairoTheme.faint)
         }
     }
 
-    private func ringStage(_ geometry: GeometryProxy) -> some View {
-        let side = min(geometry.size.width, geometry.size.height - 260)
-        return ZStack {
-            KairoRingMetalView(state: model.renderState())
-                .frame(width: side, height: side)
+    private func presence(side: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            HStack {
+                Eyebrow(text: "Presence / 01", color: KairoTheme.chrome)
+                Spacer()
+                Text(model.ring.presentationFresh ? "COMMITTED AFFECT" : "AWAITING STATE")
+                    .font(.system(size: 8, design: .monospaced)).tracking(1)
+                    .foregroundStyle(KairoTheme.faint)
+            }.padding(.top, 20)
+            ringStage(side: max(180, side))
+                .padding(.vertical, -24)
+            Text(bodyHeadline.capitalized)
+                .font(.system(size: 42, weight: .regular, design: .serif))
+                .foregroundStyle(KairoTheme.prose)
+                .multilineTextAlignment(.center)
+                .contentTransition(.opacity)
+            HStack(spacing: 9) {
+                Circle().fill(KairoTheme.primary.opacity(0.6)).frame(width: 4, height: 4)
+                Text(model.ring.presentationFresh ? model.ring.mood.capitalized : "Waiting for Kairo’s state")
+                Text("·")
+                Text("Touch to connect")
+            }
+            .font(.system(size: 11)).foregroundStyle(KairoTheme.chrome)
+            .padding(.top, 12).padding(.bottom, 26)
+            quickActions
+            Button { model.destination = .conversation } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "waveform").foregroundStyle(KairoTheme.primary)
+                    Text(model.voice.isCapturing ? "Listening…" : "Say something to Kairo")
+                        .font(.system(size: 13)).foregroundStyle(KairoTheme.chrome)
+                    Spacer()
+                    Image(systemName: "arrow.up.right").font(.system(size: 12)).foregroundStyle(KairoTheme.primary)
+                }.padding(18)
+                .background(KairoTheme.plane.opacity(0.8), in: RoundedRectangle(cornerRadius: 18))
+                .overlay(RoundedRectangle(cornerRadius: 18).stroke(KairoTheme.hairline))
+            }.buttonStyle(.plain).padding(.top, 25).frame(maxWidth: 420)
+        }
+    }
+
+    private func ringStage(side: CGFloat) -> some View {
+        ZStack {
+            KairoRingMetalView(state: model.renderState(), framesPerSecond: reduceMotion ? 10 : 30,
+                               reduceMotion: reduceMotion)
             if model.settings.cameraMode, let session = model.body.frontCameraSession {
                 FrontCameraPreview(session: session)
-                    .frame(width: side * 0.58, height: side * 0.58)
+                    .frame(width: side * 0.30, height: side * 0.30)
                     .clipShape(Circle())
-                    .overlay(Circle().stroke(KairoTheme.body.opacity(0.55), lineWidth: 2))
-            }
-            VStack(spacing: 6) {
-                if model.stageDisplayText != nil {
-                    EmptyView()
-                        .accessibilityLabel(model.stageDisplayText ?? "")
-                } else if model.settings.cameraMode && model.body.frontCameraSession != nil {
-                    EmptyView()
-                } else {
-                    Text(model.presentation.snapshot.flatMap { $0.expression?.uppercased() }
-                         ?? (model.body.display.state.uppercased()))
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                        .tracking(2.2)
-                        .foregroundStyle(KairoTheme.prose.opacity(0.85))
-                    Text(bodyHeadline)
-                        .font(.system(size: 12, design: .rounded))
-                        .foregroundStyle(KairoTheme.dim)
-                }
+                    .overlay(Circle().stroke(KairoTheme.body.opacity(0.3)))
             }
             if let point = contactPoint {
-                Circle()
-                    .stroke(KairoTheme.primary.opacity(0.7), lineWidth: 2)
-                    .frame(width: 56, height: 56)
-                    .position(point)
-                    .allowsHitTesting(false)
+                Circle().stroke(KairoTheme.primary.opacity(0.7), lineWidth: 1)
+                    .frame(width: 68, height: 68).position(point).allowsHitTesting(false)
+                Circle().fill(KairoTheme.primary.opacity(0.12))
+                    .frame(width: 100, height: 100).blur(radius: 12).position(point).allowsHitTesting(false)
             }
         }
-        .frame(maxWidth: .infinity)
-        .contentShape(Rectangle())
+        .frame(width: side, height: side)
+        .contentShape(Circle())
         .gesture(contactGesture(in: side))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Kairo presence. \(bodyHeadline)")
+        .accessibilityHint("Touch sends a contact observation to Kairo")
     }
 
     private var bodyHeadline: String {
@@ -115,18 +142,6 @@ struct PresenceStageView: View {
         case .reflecting: return "reflecting"
         case .disconnected: return "reconnecting"
         case .idle: return model.presentation.snapshot?.phase == "idle" ? "present" : "awaiting state"
-        }
-    }
-
-    private var phaseLine: some View {
-        HStack(spacing: 14) {
-            Eyebrow(text: "mood \(model.ring.mood)")
-            Eyebrow(text: "posture \(model.ring.posture.rawValue)")
-            if model.ring.dotFresh { Eyebrow(text: "dot live", color: KairoTheme.primary) }
-            if let trouble = model.feed.connectionTrouble {
-                Text(trouble).font(.caption).foregroundStyle(KairoTheme.warn).lineLimit(2)
-            }
-            Spacer()
         }
     }
 
@@ -170,23 +185,6 @@ struct PresenceStageView: View {
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
-    }
-
-    private func stageMessage(_ text: String) -> some View {
-        PlaneCard {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Eyebrow(text: "Kairo showed this on the body", color: KairoTheme.body)
-                    Text(text)
-                        .font(.system(size: 15, design: .rounded))
-                        .foregroundStyle(KairoTheme.prose)
-                        .textSelection(.enabled)
-                }
-                Spacer()
-                Button("Dismiss") { model.clearStageDisplay() }
-                    .font(.caption)
-            }
-        }
     }
 
     // MARK: - Contact gesture

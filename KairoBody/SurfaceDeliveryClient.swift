@@ -8,7 +8,7 @@ final class SurfaceDeliveryClient: ObservableObject {
     typealias Request = (String, [String: Any]?) async throws -> [String: Any]
     @Published private(set) var busy = false
     @Published private(set) var error: String?
-    var display: (String) -> Void = { _ in }
+    var display: (String) async -> Bool = { _ in false }
     var speak: (String, @escaping (ActionPhase, String) -> Void) -> Bool = { _, _ in false }
     var stopSpeech: () -> Void = {}
     private let request: Request
@@ -92,10 +92,11 @@ final class SurfaceDeliveryClient: ObservableObject {
                 guard displayVisible, foreground else {
                     await finish(success: false, detail: "body display is obscured", run: run); return
                 }
-                display(text)
-                await Task.yield()
-                await finish(success: displayVisible && foreground,
-                    detail: displayVisible && foreground ? "answer applied to visible display" : "display became obscured", run: run)
+                let applied = await display(text)
+                guard generation == run else { return }
+                let visible = applied && displayVisible && foreground
+                await finish(success: visible,
+                    detail: visible ? "answer applied to visible display" : "display did not acknowledge visible output", run: run)
             } else {
                 let started = speak(text) { [weak self] phase, detail in
                     guard phase == .completed || phase == .failed || phase == .stopped || phase == .expired else { return }

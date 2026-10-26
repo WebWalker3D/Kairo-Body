@@ -36,8 +36,8 @@ struct TranscriptView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Text("All conversations")
-                .font(.system(size: 22, weight: .semibold, design: .rounded))
+            Text("Conversations")
+                .font(.system(size: 30, weight: .regular, design: .serif))
                 .foregroundStyle(KairoTheme.prose)
             if model.feed.following { StatusChip(label: "LIVE", color: KairoTheme.body) }
             if model.feed.processing { StatusChip(label: "KAIRO WORKING", color: KairoTheme.mind) }
@@ -73,7 +73,7 @@ struct TranscriptView: View {
     private var turnsList: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
+                LazyVStack(alignment: .leading, spacing: 20) {
                     ForEach(model.feed.turns) { turn in
                         TurnCard(turn: turn)
                             .id(turn.id)
@@ -88,8 +88,10 @@ struct TranscriptView: View {
                             .frame(maxWidth: .infinity)
                     }
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 8)
+                .frame(maxWidth: 900)
+                .padding(.horizontal, 24)
+                .padding(.top, 16)
+                .frame(maxWidth: .infinity)
             }
             .onChange(of: model.feed.turns.count) { _, count in
                 if let last = model.feed.turns.last { withAnimation { proxy.scrollTo(last.id, anchor: .bottom) } }
@@ -127,7 +129,7 @@ struct TranscriptView: View {
                     model.conversation.outputDestination = value
                 }
                 TextField(model.settings.followEcho
-                          ? "Say something to Kairo — this is the Dot's own conversation"
+                          ? "Continue with Kairo…"
                           : "Say something to Kairo",
                           text: $draft, axis: .vertical)
                     .focused($composerFocused)
@@ -198,7 +200,8 @@ struct TurnCard: View {
             if !turn.answer.isEmpty {
                 Divider().overlay(KairoTheme.hairline)
                 Text(turn.answer)
-                    .font(.system(size: 14, design: .rounded))
+                    .font(.system(size: 17, design: .serif))
+                    .lineSpacing(6)
                     .foregroundStyle(KairoTheme.prose.opacity(0.92))
                     .textSelection(.enabled)
             }

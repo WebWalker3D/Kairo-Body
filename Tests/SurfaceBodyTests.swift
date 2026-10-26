@@ -24,8 +24,22 @@ final class SurfaceDeliveryTests: XCTestCase {
             }
             return ["accepted": true]
         })
-        client.display = { _ in }
+        client.display = { _ in true }
         return (client, { box })
+    }
+
+    func testUnacknowledgedDisplayCannotReportDeliverySuccess() async {
+        var results: [[String: Any]] = []
+        let client = SurfaceDeliveryClient(request: { path, body in
+            if path.hasSuffix("/claim") {
+                return ["job_id": "job_visible", "target": "ipad_display", "kind": "text", "text": "Look here"]
+            }
+            if path.hasSuffix("/result"), let body { results.append(body) }
+            return [:]
+        })
+        // No mounted view acknowledges applying this output.
+        await client.deliver(jobID: "job_visible", destination: "ipad_display")
+        XCTAssertEqual(results.first?["status"] as? String, "failed")
     }
 
     func testDisplayDeliveryClaimsAppliesAndReceipts() async {

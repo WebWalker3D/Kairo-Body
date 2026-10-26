@@ -5,7 +5,7 @@ Kairo's iPad body endpoint: a dependency-free iPadOS 17 SwiftUI + Metal app
 `icu.kairo.body`. This public repository is the source of record for the
 installed body app; the server lives in the private novexai repository.
 
-Kairo Body 2.0 (v2.0.5, build 55) replaces the 1.0.x MVP line in place: same
+Kairo Body 3.0 (v3.0.0, build 56) replaces the 1.0.x MVP line in place: same
 bundle id, same Keychain service/accounts (`icu.kairo.body` bearer-token /
 agent-token, `icu.kairo.body.owner` paired-owner-proof), same UserDefaults
 identity (`echoSessionID` and friends), endpoint id `ipad-pro-2017`. A
@@ -76,7 +76,7 @@ Dot's endpoint id (`echomuse-rs03qr`) is a fixed deployment constant in
 
 GitHub Actions (`build-ipa.yml`) runs the unit suite on an iPad simulator,
 captures visual smoke screenshots, builds the unsigned device app, asserts
-bundle id, version 2.0.5/build 55, permission strings and that no personal
+bundle id, version 3.0.0/build 56, permission strings and that no personal
 provisioning was baked, then uploads `KairoBody.ipa`.
 
 On a Mac directly:
@@ -122,5 +122,34 @@ in place on the iPad.
   `docs/SERVER_CONTRACT.md` and `docs/ECHO_INTEGRATION.md` remain the wire
   contract references and still describe the live server faithfully.
 - The 2.0 rewrite landed in novexai's `ios/KairoBody` while the design was
-  unsettled, then moved here as this repository's main line; the live iPad
-  still runs 1.0.35 (build 37) until a 2.0 build is installed and verified.
+  unsettled, then moved here as this repository's main line; the installed device version must be checked on the iPad; repository history
+  does not establish which build is currently installed.
+
+## 3.0 — Presence workspace
+
+The main screen now combines a procedural Metal presence with the shared
+conversation, Dot/body links, committed state, reported rest, and shortcuts to
+vision and private continuity. Landscape uses a two-column workspace; portrait
+stacks it. Every page uses the same quieter navigation and typography.
+
+Kairo-selected iPad output now follows `metadata_json.surface_output_target`
+from a completed job. Display output appears above any destination and must be
+acknowledged by the mounted view before a successful delivery receipt. Sensory
+display commands advertise availability only while the actual Stage is visible.
+Explicit speech advertises presence before submission. Existing claims,
+authorization and durable idempotency are retained.
+
+The Body screen includes a searchable, read-only capability catalogue. Reported
+rest comes from a narrow `/api/kairo-state` projection; private dream text is
+never retained or displayed. These reads run every 30 seconds only in the
+foreground with local owner pairing. Unavailable/stale rest is unknown, not
+awake. Enabled capabilities are not claims of authorization or readiness.
+
+Metal's twelve emitter values now use a verified 304-byte inline uniform block,
+fixing the former 128-byte Swift Array-reference upload. The orbital treatment
+keeps the original twelve directional emitters and committed mood palette.
+Reduce Motion freezes procedural motion while retaining real state updates.
+
+CI includes the complete unit suite, portrait/landscape navigation screenshots,
+and an unsigned device build. Hardware sensor, audio and performance acceptance
+still requires installing the replacement IPA on the iPad.

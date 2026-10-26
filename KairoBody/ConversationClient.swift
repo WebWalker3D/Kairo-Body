@@ -135,7 +135,7 @@ final class ConversationClient: ObservableObject {
                 case .textOnly: destination = nil
                 case .speak: destination = "ipad_speech"
                 }
-                if let destination, destination != "silent", destination != "ipad_speech" {
+                if let destination, destination != "silent" {
                     try await self.prepareOutput?(destination)
                     guard current == self.generation else { throw CancellationError() }
                 }
@@ -175,8 +175,10 @@ final class ConversationClient: ObservableObject {
             }
             reply = answer
             status = ""
-            if turn.outputDestination == "ipad_speech" {
-                await deliverOutput?(jobID, "ipad_speech")
+            if let target = SurfaceOutputPolicy.target(job: job, requested: turn.outputDestination) {
+                await deliverOutput?(jobID, target)
+            } else {
+                await deliverOutput?(jobID, "silent")
             }
         case .stillRunning(let job):
             // Keep the message recoverable: the job may settle later on any

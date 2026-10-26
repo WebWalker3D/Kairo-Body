@@ -9,6 +9,7 @@ import UIKit
 /// whole app renders.
 @MainActor
 final class AppModel: ObservableObject {
+    let systems = SystemsClient()
     let settings = AppSettings()
     let sensors = SensorManager()
     let pairing = PairingClient()
@@ -31,6 +32,9 @@ final class AppModel: ObservableObject {
     @Published var exportedArtifact: URL?
     @Published private(set) var stageDisplayText: String?
     @Published private(set) var lastContactAt: Date?
+    @Published private(set) var stageDisplayID = UUID()
+    private var acknowledgedDisplayID: UUID?
+    private var rootSurfaceVisible = false
     private var ringTask: Task<Void, Never>?
     private var invitationTask: Task<Void, Never>?
     private var contactCounter = 0
@@ -56,7 +60,7 @@ final class AppModel: ObservableObject {
         surfaceDelivery = SurfaceDeliveryClient(request: { path, body in
             try await http.agentObject(path, method: body == nil ? "GET" : "POST", body: body)
         })
-        surfaceDelivery.display = { [weak self] text in self?.stageDisplayText = text }
+        surfaceDelivery.display = { [weak self] text in await self?.applyStageDisplay(text) ?? false }
         surfaceDelivery.speak = { [weak self] text, event in self?.speech.speak(text, onEvent: event) ?? false }
         surfaceDelivery.stopSpeech = { [weak self] in self?.speech.stop() }
         conversation.prepareOutput = { [weak self] destination in
@@ -82,7 +86,7 @@ final class AppModel: ObservableObject {
         forChild(settings); forChild(sensors); forChild(pairing); forChild(feed)
         forChild(presentation); forChild(invitations); forChild(privateRoom)
         forChild(echo); forChild(voice); forChild(visual)
-        forChild(body); forChild(conversation); forChild(surfaceDelivery)
+        forChild(body); forChild(conversation); forChild(surfaceDelivery); forChild(speech); forChild(systems)
     }
 
     private func forChild<_Source: ObservableObject>(_ source: _Source) {
@@ -105,6 +109,8 @@ final class AppModel: ObservableObject {
         guard isForeground != foreground else { return }
         isForeground = foreground
         body.setForeground(foreground)
+        updateSurfaceVisibility()
+        systems.start(paired: pairing.isPaired, foreground: foreground)
         surfaceDelivery.setForeground(foreground)
         echo.follow(token: AppConfig.agentToken, foreground: foreground && settings.followEcho)
         feed.followAllSurfaces(foreground: foreground)
@@ -125,6 +131,8 @@ final class AppModel: ObservableObject {
     func connectIfNeeded() {
         guard AppConfig.sensoryToken.isEmpty == false || AppConfig.agentToken.isEmpty == false else { return }
         body.start()
+        systems.start(paired: pairing.isPaired, foreground: isForeground)
+        updateSurfaceVisibility()
         echo.follow(token: AppConfig.agentToken, foreground: isForeground && settings.followEcho)
         feed.followAllSurfaces(foreground: isForeground)
         presentation.start(paired: pairing.isPaired, foreground: isForeground)
@@ -163,7 +171,7 @@ final class AppModel: ObservableObject {
                 self.ring = self.currentRingState()
                 // A screensavered stage is not a usable display surface; the
                 // delivery presence and claim paths must report that honestly.
-                surfaceDelivery.setDisplayVisible(!body.screensaverActive)
+                updateSurfaceVisibility()
                 // The server-side "is Kairo working anywhere" read is cached
                 // for eight seconds by refreshProcessing itself; asking every
                 // tick is how kairoBusy can hold the display at all.
@@ -253,8 +261,11 @@ final class AppModel: ObservableObject {
 
     func refreshProcessing() async {
         if let cache = kairoProcessingCache, Date().timeIntervalSince(cache.at) < 8 { return }
-        let value = await conversation.isKairoProcessing() ?? false
-        kairoProcessingCache = (value, Date())
+        if let value = await conversation.isKairoProcessing() {
+            kairoProcessingCache = (value, Date())
+        } else if let cache = kairoProcessingCache, Date().timeIntervalSince(cache.at) > 30 {
+            kairoProcessingCache = nil
+        }
     }
 
     // MARK: - Contact
@@ -288,8 +299,52 @@ final class AppModel: ObservableObject {
 
     // MARK: - Presentation apply on the stage
 
-    func displayCommand(_ text: String) { stageDisplayText = text }
-    func clearStageDisplay() { stageDisplayText = nil }
+    func setSurfaceVisibility(_ visible: Bool) {
+        rootSurfaceVisible = visible
+        updateSurfaceVisibility()
+    }
+
+    func updateSurfaceVisibility() {
+        let visible = rootSurfaceVisible && isForeground && !body.screensaverActive
+        surfaceDelivery.setDisplayVisible(visible)
+        // Sensory display commands update the stage's headline/ring. Other
+        // tabs are not that surface; the claimed output overlay is separate.
+        body.setDisplayVisible(visible && destination == .stage)
+    }
+
+    func pairingChanged() {
+        presentation.start(paired: pairing.isPaired, foreground: isForeground)
+        feed.followAllSurfaces(foreground: isForeground)
+        systems.start(paired: pairing.isPaired, foreground: isForeground)
+        settingsChanged()
+        if !pairing.isPaired { privateRoom.stop(); clearStageDisplay() }
+    }
+
+    func displayCommand(_ text: String) {
+        acknowledgedDisplayID = nil
+        stageDisplayID = UUID()
+        stageDisplayText = text
+    }
+
+    func acknowledgeStageDisplay(_ text: String) {
+        guard text == stageDisplayText, rootSurfaceVisible, isForeground, !body.screensaverActive else { return }
+        acknowledgedDisplayID = stageDisplayID
+    }
+
+    private func applyStageDisplay(_ text: String) async -> Bool {
+        guard rootSurfaceVisible, isForeground, !body.screensaverActive else { return false }
+        displayCommand(text)
+        let id = stageDisplayID
+        for _ in 0..<40 {
+            guard rootSurfaceVisible, isForeground, !body.screensaverActive,
+                  id == stageDisplayID, !Task.isCancelled else { return false }
+            if acknowledgedDisplayID == id { return true }
+            do { try await Task.sleep(for: .milliseconds(50)) } catch { return false }
+        }
+        return false
+    }
+
+    func clearStageDisplay() { stageDisplayText = nil; acknowledgedDisplayID = nil; stageDisplayID = UUID() }
 
     func acceptInvitationIntoConversation() async {
         guard let text = await invitations.accept() else { return }

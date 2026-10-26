@@ -26,8 +26,10 @@ struct PrivateRoomView: View {
                     pairedRoom(endpointID)
                 }
             }
-            .padding(.horizontal, 18)
+            .frame(maxWidth: 1000)
+            .padding(.horizontal, 24)
             .padding(.bottom, 96)
+            .frame(maxWidth: .infinity)
         }
         .background(KairoTheme.background)
     }
@@ -35,7 +37,7 @@ struct PrivateRoomView: View {
     private var header: some View {
         HStack(spacing: 10) {
             Text("Private room")
-                .font(.system(size: 22, weight: .semibold, design: .rounded))
+                .font(.system(size: 30, weight: .regular, design: .serif))
                 .foregroundStyle(KairoTheme.prose)
             Spacer()
         }

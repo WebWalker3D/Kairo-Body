@@ -32,12 +32,14 @@ enum RingMotion: Int {
 struct KairoRingMetalView: UIViewRepresentable {
     let state: RingRenderState
     var framesPerSecond: Int = 30
+    var reduceMotion = false
 
     func makeCoordinator() -> Renderer { Renderer() }
 
     func makeUIView(context: Context) -> MTKView {
         guard let device = MTLCreateSystemDefaultDevice() else { return MTKView() }
         let view = MTKView(frame: .zero, device: device)
+        view.contentScaleFactor = min(UIScreen.main.scale, 1.5)
         view.isOpaque = false
         view.backgroundColor = .clear
         view.clearColor = MTLClearColorMake(0, 0, 0, 0)
@@ -52,10 +54,12 @@ struct KairoRingMetalView: UIViewRepresentable {
 
     func updateUIView(_ view: MTKView, context: Context) {
         view.preferredFramesPerSecond = framesPerSecond
+        context.coordinator.reducedMotion = reduceMotion
         context.coordinator.apply(state, size: view.bounds.size)
     }
 
     final class Renderer: NSObject, MTKViewDelegate {
+        var reducedMotion = false
         private var pipeline: MTLRenderPipelineState?
         private var queue: MTLCommandQueue?
         private var uniforms = KairoRingUniformsStorage()
@@ -106,7 +110,7 @@ struct KairoRingMetalView: UIViewRepresentable {
             // a day on an otherwise calm surface, far cheaper than the ring
             // quietly freezing on a shelf that never sleeps.
             let elapsed = Float(CFAbsoluteTimeGetCurrent() - start)
-            uniforms.paramsA.x = elapsed.truncatingRemainder(dividingBy: 43_200)
+            uniforms.paramsA.x = reducedMotion ? 0 : elapsed.truncatingRemainder(dividingBy: 43_200)
             uniforms.bind(encoder)
             encoder.setRenderPipelineState(pipeline)
             encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
@@ -127,7 +131,14 @@ struct KairoRingUniformsStorage {
     var paramsA = SIMD4<Float>(0, 0.35, 0, 0.9)
     var paramsB = SIMD4<Float>(0.34, 0.05, 1, 0)
     var paramsC = SIMD4<Float>(0, 0, 0, 0)
-    var emitters: [SIMD4<Float>] = Array(repeating: .zero, count: 12)
+    // Metal arrays are inline. A Swift Array is a heap reference and cannot
+    // be uploaded as part of this uniform struct.
+    private var emitterStorage: (
+        SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>,
+        SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>,
+        SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>
+    ) = (.zero, .zero, .zero, .zero, .zero, .zero,
+         .zero, .zero, .zero, .zero, .zero, .zero)
 
     mutating func apply(_ state: RingRenderState, viewport: CGSize) {
         self.viewport = SIMD4<Float>(Float(viewport.width), Float(viewport.height), 0, 0)
@@ -138,7 +149,7 @@ struct KairoRingUniformsStorage {
         paramsA.z = state.energy
         paramsA.w = state.intensity
         // Ring radius and emitter width in the shader's normalized space.
-        paramsB.x = 0.34
+        paramsB.x = 0.46
         paramsB.y = 0.055
         paramsB.z = state.fade
         paramsB.w = state.sleeping ? 1 : 0
@@ -146,8 +157,11 @@ struct KairoRingUniformsStorage {
                                Float(state.motion.rawValue), 0)
         let levels = state.emitterLevels.count == 12 ? state.emitterLevels :
             RingMirror.resample(state.emitterLevels.map(Double.init), to: 12).map(Float.init)
-        for index in 0..<12 {
-            emitters[index] = SIMD4<Float>(levels[safe: index] ?? 0, Float(index) * 0.53, 0, 0)
+        withUnsafeMutableBytes(of: &emitterStorage) { bytes in
+            for index in 0..<12 {
+                let emitter = SIMD4<Float>(levels[safe: index] ?? 0, Float(index) * 0.53, 0, 0)
+                bytes.storeBytes(of: emitter, toByteOffset: index * 16, as: SIMD4<Float>.self)
+            }
         }
     }
 

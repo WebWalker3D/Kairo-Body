@@ -5,12 +5,21 @@ struct RootShellView: View {
     @State private var needsSetup = !AppConfig.hasMinimumProvisioning
         && !UserDefaults.standard.bool(forKey: "setupDeferred")
 
+    @State private var keyboardVisible = false
+
     var body: some View {
         ZStack {
             KairoTheme.background
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            if !model.body.screensaverActive {
+            if !model.body.screensaverActive, !needsSetup, let text = model.stageDisplayText {
+                VStack {
+                    Spacer()
+                    SurfaceOutputView(text: text)
+                        .padding(.bottom, keyboardVisible ? 12 : 88)
+                }
+            }
+            if !model.body.screensaverActive && !keyboardVisible {
                 VStack {
                     Spacer()
                     BottomRail()
@@ -22,6 +31,14 @@ struct RootShellView: View {
             }
         }
         .tint(KairoTheme.primary)
+        .onAppear { model.setSurfaceVisibility(!needsSetup) }
+        .onDisappear { model.setSurfaceVisibility(false) }
+        .onChange(of: model.pairing.isPaired) { _, _ in model.pairingChanged() }
+        .onChange(of: needsSetup) { _, value in model.setSurfaceVisibility(!value) }
+        .onChange(of: model.destination) { _, _ in model.updateSurfaceVisibility() }
+        .onChange(of: model.body.screensaverActive) { _, _ in model.updateSurfaceVisibility() }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboardVisible = true }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboardVisible = false }
         .animation(.easeInOut(duration: 0.8), value: model.body.screensaverActive)
         .sheet(isPresented: $needsSetup) {
             SetupView().environmentObject(model)
@@ -53,37 +70,37 @@ private struct BottomRail: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 4) {
             ForEach(AppModel.Destination.allCases) { item in
                 Button {
-                    model.destination = item
+                    model.body.noteUserActivity()
+                    withAnimation(.easeOut(duration: 0.2)) { model.destination = item }
                 } label: {
-                    VStack(spacing: 4) {
-                        Image(systemName: icon(item))
-                            .font(.system(size: 17, weight: .medium))
-                        Text(item.rawValue)
-                            .font(.system(size: 10, weight: .semibold, design: .rounded))
-                            .tracking(0.6)
+                    VStack(spacing: 5) {
+                        Image(systemName: icon(item)).font(.system(size: 18, weight: .light))
+                        Text(item == .stage ? "Presence" : item.rawValue)
+                            .font(.system(size: 9, weight: .medium))
                     }
-                    .frame(width: 78, height: 52)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14)
-                            .fill(model.destination == item ? KairoTheme.primary.opacity(0.14) : KairoTheme.plane.opacity(0.72))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14)
-                            .stroke(model.destination == item ? KairoTheme.primary.opacity(0.5) : KairoTheme.hairline,
-                                    lineWidth: 1)
-                    )
+                    .frame(maxWidth: .infinity).frame(height: 51)
                     .foregroundStyle(model.destination == item ? KairoTheme.primary : KairoTheme.chrome)
+                    .background(model.destination == item ? KairoTheme.primary.opacity(0.10) : .clear,
+                                in: RoundedRectangle(cornerRadius: 15))
+                    .overlay(alignment: .bottom) {
+                        if model.destination == item {
+                            Capsule().fill(KairoTheme.primary).frame(width: 15, height: 2).offset(y: 3)
+                        }
+                    }
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(model.destination == item ? .isSelected : [])
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
-        .padding(.bottom, 6)
+        .padding(8)
+        .frame(maxWidth: 590)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 23))
+        .overlay(RoundedRectangle(cornerRadius: 23).stroke(KairoTheme.hairline))
+        .shadow(color: .black.opacity(0.35), radius: 24, y: 8)
+        .padding(.horizontal, 14).padding(.bottom, 8)
     }
 
     private func icon(_ item: AppModel.Destination) -> String {
@@ -131,9 +148,9 @@ struct PlaneCard<Content: View>: View {
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 16).fill(KairoTheme.plane.opacity(0.85)))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(KairoTheme.hairline, lineWidth: 1))
+        .padding(20)
+        .background(RoundedRectangle(cornerRadius: 22).fill(KairoTheme.plane.opacity(0.85)))
+        .overlay(RoundedRectangle(cornerRadius: 22).stroke(KairoTheme.hairline, lineWidth: 1))
     }
 }
 

@@ -181,6 +181,28 @@ fragment float4 kairoRingFragment(
         emitterMix += mix(u.mood.rgb, u.accent.rgb, level) * contribution;
     }
 
+    // Coherent orbital filaments make a spatial presence from the same
+    // measured phase/affect. These are expressive light, never telemetry.
+    const float r = length(p);
+    float silk = 0.0;
+    float corona = 0.0;
+    for (uint strand = 0; strand < 5; strand++) {
+        const float k = float(strand);
+        const float drift = time * (0.10 + k * 0.015);
+        const float wave = sin(theta * (3.0 + k) + drift) * 0.018
+                         + sin(theta * 7.0 - drift * 1.7 + k) * 0.009;
+        const float orbit = radius * (1.12 + k * 0.10) + wave * (0.4 + energy);
+        const float d = abs(r - orbit);
+        const float arc = 0.35 + 0.65 * pow(0.5 + 0.5 * cos(theta - drift - k * 1.8), 3.0);
+        silk += exp(-d * d * 180000.0) * arc * (0.18 + energy * 0.13);
+        corona += exp(-d * d * 1400.0) * arc * 0.035;
+    }
+    // A soft atmosphere with a dark centre gives the ring depth without
+    // covering the twelve original directional emitters.
+    const float atmosphere = exp(-pow((r - radius * 0.94) / 0.13, 2.0));
+    const float innerEdge = exp(-pow((r - radius * 0.72) / 0.006, 2.0));
+    const float contour = 0.5 + 0.5 * sin(theta * 2.0 + time * 0.12);
+
     // Sleeping posture keeps a barely-there ember, like the Dot at timeout.
     const float sleepMix = sleeping * 0.12;
 
@@ -194,7 +216,11 @@ fragment float4 kairoRingFragment(
         // Dark clock stage: the ring rests; the timekeeping is drawn elsewhere.
         colour *= 0.14;
     }
+    colour += mix(u.mood.rgb, u.accent.rgb, contour) * (silk + corona) * intensity;
+    colour += u.mood.rgb * atmosphere * 0.07 * intensity;
+    colour += u.accent.rgb * innerEdge * 0.035 * intensity;
     colour *= fade;
+    colour = 1.0 - exp(-colour * 1.25);
 
     const float alpha = clamp(
         length(colour) * 1.35 + (1.0 - sleeping) * guide * 0.15,

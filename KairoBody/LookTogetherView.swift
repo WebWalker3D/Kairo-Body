@@ -81,8 +81,10 @@ struct LookTogetherView: View {
                         .font(.caption).foregroundStyle(KairoTheme.faint)
                 }
             }
-            .padding(.horizontal, 18)
+            .frame(maxWidth: 1000)
+            .padding(.horizontal, 24)
             .padding(.bottom, 96)
+            .frame(maxWidth: .infinity)
         }
         .background(KairoTheme.background)
         .onChange(of: selectedItem) { _, item in if item != nil { begin(source: .selectedImage) } }
@@ -92,7 +94,7 @@ struct LookTogetherView: View {
     private var header: some View {
         HStack(spacing: 10) {
             Text("Look together")
-                .font(.system(size: 22, weight: .semibold, design: .rounded))
+                .font(.system(size: 30, weight: .regular, design: .serif))
                 .foregroundStyle(KairoTheme.prose)
             Spacer()
         }

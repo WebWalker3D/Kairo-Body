@@ -4,10 +4,10 @@ import SwiftUI
 /// shared Kairo visual identity. Elevation is luminosity and a lit edge, never
 /// a stock iOS drop-shadow hierarchy.
 enum KairoTheme {
-    static let groundTop = Color(red: 17 / 255, green: 24 / 255, blue: 39 / 255)
-    static let groundMid = Color(red: 13 / 255, green: 17 / 255, blue: 25 / 255)
-    static let groundDeep = Color(red: 11 / 255, green: 12 / 255, blue: 16 / 255)
-    static let plane = Color(red: 17 / 255, green: 20 / 255, blue: 28 / 255)
+    static let groundTop = Color(red: 7 / 255, green: 14 / 255, blue: 24 / 255)
+    static let groundMid = Color(red: 6 / 255, green: 10 / 255, blue: 18 / 255)
+    static let groundDeep = Color(red: 4 / 255, green: 7 / 255, blue: 13 / 255)
+    static let plane = Color(red: 13 / 255, green: 20 / 255, blue: 31 / 255)
     static let prose = Color(red: 231 / 255, green: 236 / 255, blue: 245 / 255)
     static let dim = Color(red: 192 / 255, green: 201 / 255, blue: 216 / 255)
     static let chrome = Color(red: 154 / 255, green: 168 / 255, blue: 188 / 255)

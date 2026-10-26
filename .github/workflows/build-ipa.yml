@@ -53,13 +53,31 @@ jobs:
         run: |
           set -o pipefail
           simulator_id=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; devices=json.load(sys.stdin)["devices"]; print(next(d["udid"] for group in devices.values() for d in group if d["name"].startswith("iPad") and d["state"] == "Shutdown"))')
+          xcrun simctl boot "$simulator_id"
+          xcrun simctl bootstatus "$simulator_id" -b
           xcodebuild test \
             -project KairoBody.xcodeproj \
             -scheme KairoBody \
             -destination "platform=iOS Simulator,id=$simulator_id" \
-            -only-testing:KairoBodyTests \
+            -parallel-testing-enabled NO \
+            -destination-timeout 90 \
+            -only-testing:KairoBodyTests -only-testing:KairoBodyUITests \
+            -resultBundlePath build/Tests.xcresult \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee /tmp/kairo-body-xctest.log
+      - name: Export interface journey screenshots
+        if: always()
+        run: |
+          if [ -d build/Tests.xcresult ]; then
+            xcrun xcresulttool export attachments --path build/Tests.xcresult --output-path visual-journey
+          fi
+      - name: Upload interface journey evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: KairoBody-interface-journey
+          path: visual-journey
+          if-no-files-found: warn
       - name: Capture iPad body visual smoke screenshots
         run: |
           simulator_id=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; devices=[d for group in json.load(sys.stdin)["devices"].values() for d in group if d["name"].startswith("iPad")]; print(next((d["udid"] for d in devices if d["state"] == "Booted"), devices[0]["udid"]))')
@@ -110,8 +128,8 @@ jobs:
           with ZipFile('KairoBody.ipa') as archive:
               info = plistlib.loads(archive.read('Payload/KairoBody.app/Info.plist'))
           assert info['CFBundleIdentifier'] == 'icu.kairo.body'
-          assert info['CFBundleVersion'] == '55'
-          assert info['CFBundleShortVersionString'] == '2.0.5'
+          assert info['CFBundleVersion'] == '56'
+          assert info['CFBundleShortVersionString'] == '3.0.0'
           assert info['CFBundleIcons']['CFBundlePrimaryIcon']['CFBundleIconFiles']
           assert 'Payload/KairoBody.app/Assets.car' in archive.namelist()
           assert info['NSCameraUsageDescription']

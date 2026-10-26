@@ -13,7 +13,7 @@ struct BodySurfaceView: View {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 10) {
                     Text("This body")
-                        .font(.system(size: 22, weight: .semibold, design: .rounded))
+                        .font(.system(size: 30, weight: .regular, design: .serif))
                         .foregroundStyle(KairoTheme.prose)
                     StatusChip(label: model.body.connectionState.rawValue.uppercased(),
                                color: model.body.connectionState == .connected ? KairoTheme.body : KairoTheme.warn)
@@ -21,9 +21,11 @@ struct BodySurfaceView: View {
                 }
                 .padding(.top, 14)
 
+                RestStatusCard()
                 linkCard
                 if let frame = model.body.lastSensorFrame { readingsCard(frame) }
                 capabilitiesCard
+                CapabilityCatalogue()
                 if let error = model.body.lastError {
                     PlaneCard {
                         Eyebrow(text: "Last body error", color: KairoTheme.danger)
@@ -33,8 +35,10 @@ struct BodySurfaceView: View {
                     }
                 }
             }
-            .padding(.horizontal, 18)
+            .frame(maxWidth: 1000)
+            .padding(.horizontal, 24)
             .padding(.bottom, 96)
+            .frame(maxWidth: .infinity)
         }
         .background(KairoTheme.background)
     }
