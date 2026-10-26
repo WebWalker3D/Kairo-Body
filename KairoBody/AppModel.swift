@@ -92,7 +92,7 @@ final class AppModel: ObservableObject {
         forChild(settings); forChild(sensors); forChild(pairing); forChild(feed)
         forChild(presentation); forChild(invitations); forChild(privateRoom)
         forChild(echo); forChild(voice); forChild(visual)
-        forChild(body); forChild(conversation); forChild(surfaceDelivery); forChild(speech); forChild(systems)
+        forChild(body); forChild(conversation); forChild(surfaceDelivery); forChild(systems)
     }
 
     private func forChild<_Source: ObservableObject>(_ source: _Source) {
