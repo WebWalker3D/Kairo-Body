@@ -95,6 +95,11 @@ jobs:
           xcrun simctl launch "$simulator_id" icu.kairo.body
           sleep 4
           xcrun simctl io "$simulator_id" screenshot KairoBody-stage.png
+          xcrun simctl io "$simulator_id" recordVideo --codec=h264 KairoBody-motion.mp4 &
+          recording_pid=$!
+          sleep 8
+          kill -INT "$recording_pid"
+          wait "$recording_pid" || true
           xcrun simctl terminate "$simulator_id" icu.kairo.body
       - name: Upload visual smoke screenshots
         uses: actions/upload-artifact@v4
@@ -103,6 +108,7 @@ jobs:
           path: |
             KairoBody-setup.png
             KairoBody-stage.png
+            KairoBody-motion.mp4
           if-no-files-found: error
       - name: Build unsigned device app
         run: |
@@ -129,8 +135,8 @@ jobs:
           with ZipFile('KairoBody.ipa') as archive:
               info = plistlib.loads(archive.read('Payload/KairoBody.app/Info.plist'))
           assert info['CFBundleIdentifier'] == 'icu.kairo.body'
-          assert info['CFBundleVersion'] == '56'
-          assert info['CFBundleShortVersionString'] == '3.0.0'
+          assert info['CFBundleVersion'] == '57'
+          assert info['CFBundleShortVersionString'] == '3.1.0'
           assert info['CFBundleIcons']['CFBundlePrimaryIcon']['CFBundleIconFiles']
           assert 'Payload/KairoBody.app/Assets.car' in archive.namelist()
           assert info['NSCameraUsageDescription']

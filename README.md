@@ -5,7 +5,7 @@ Kairo's iPad body endpoint: a dependency-free iPadOS 17 SwiftUI + Metal app
 `icu.kairo.body`. This public repository is the source of record for the
 installed body app; the server lives in the private novexai repository.
 
-Kairo Body 3.0 (v3.0.0, build 56) replaces the 1.0.x MVP line in place: same
+Kairo Body 3.1 (v3.1.0, build 57) replaces the 1.0.x MVP line in place: same
 bundle id, same Keychain service/accounts (`icu.kairo.body` bearer-token /
 agent-token, `icu.kairo.body.owner` paired-owner-proof), same UserDefaults
 identity (`echoSessionID` and friends), endpoint id `ipad-pro-2017`. A
@@ -76,7 +76,7 @@ Dot's endpoint id (`echomuse-rs03qr`) is a fixed deployment constant in
 
 GitHub Actions (`build-ipa.yml`) runs the unit suite on an iPad simulator,
 captures visual smoke screenshots, builds the unsigned device app, asserts
-bundle id, version 3.0.0/build 56, permission strings and that no personal
+bundle id, version 3.1.0/build 57, permission strings and that no personal
 provisioning was baked, then uploads `KairoBody.ipa`.
 
 On a Mac directly:
@@ -125,12 +125,18 @@ in place on the iPad.
   unsettled, then moved here as this repository's main line; the installed device version must be checked on the iPad; repository history
   does not establish which build is currently installed.
 
-## 3.0 — Presence workspace
+## 3.1 — Immersive particle body
 
-The main screen now combines a procedural Metal presence with the shared
-conversation, Dot/body links, committed state, reported rest, and shortcuts to
-vision and private continuity. Landscape uses a two-column workspace; portrait
-stacks it. Every page uses the same quieter navigation and typography.
+The stage fills the screen with 24,000 GPU-rendered particles: 32 flowing
+filaments, perspective depth, spectral light and a dispersed outer field.
+The twelve Dot emitters, committed mood palette, activity and sleep/fade still
+control its expression. Touch deforms the local field while preserving the
+existing contact observation. Reduce Motion freezes the procedural clock.
+
+Type directly on the stage, choose the existing output destination, or open
+Conversation. The expandable Systems panel holds the shared preview, links,
+committed state and reported rest. The shared-preview privacy preference is
+respected. The stage fits portrait and landscape without scrolling.
 
 Kairo-selected iPad output now follows `metadata_json.surface_output_target`
 from a completed job. Display output appears above any destination and must be
@@ -146,8 +152,8 @@ foreground with local owner pairing. Unavailable/stale rest is unknown, not
 awake. Enabled capabilities are not claims of authorization or readiness.
 
 Metal's twelve emitter values now use a verified 304-byte inline uniform block,
-fixing the former 128-byte Swift Array-reference upload. The orbital treatment
-keeps the original twelve directional emitters and committed mood palette.
+fixing the former 128-byte Swift Array-reference upload. The particle treatment
+keeps the original twelve directional emitter inputs and committed mood palette.
 Reduce Motion freezes procedural motion while retaining real state updates.
 
 CI includes the complete unit suite, portrait/landscape navigation screenshots,

@@ -33,6 +33,7 @@ struct KairoRingMetalView: UIViewRepresentable {
     let state: RingRenderState
     var framesPerSecond: Int = 30
     var reduceMotion = false
+    var contact: CGPoint? = nil
 
     func makeCoordinator() -> Renderer { Renderer() }
 
@@ -55,11 +56,17 @@ struct KairoRingMetalView: UIViewRepresentable {
     func updateUIView(_ view: MTKView, context: Context) {
         view.preferredFramesPerSecond = framesPerSecond
         context.coordinator.reducedMotion = reduceMotion
+        context.coordinator.contactTarget = contact.map {
+            SIMD4<Float>(Float($0.x * 2 - 1), Float(1 - $0.y * 2), 1, 0)
+        } ?? SIMD4<Float>(0, 0, 0, 0)
         context.coordinator.apply(state, size: view.bounds.size)
     }
 
     final class Renderer: NSObject, MTKViewDelegate {
         var reducedMotion = false
+        var contactTarget = SIMD4<Float>.zero
+        private var contactCurrent = SIMD4<Float>.zero
+        private var particlePipeline: MTLRenderPipelineState?
         private var pipeline: MTLRenderPipelineState?
         private var queue: MTLCommandQueue?
         private var uniforms = KairoRingUniformsStorage()
@@ -86,6 +93,12 @@ struct KairoRingMetalView: UIViewRepresentable {
             descriptor.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
             do { pipeline = try view.device?.makeRenderPipelineState(descriptor: descriptor) }
             catch { pipeline = nil }
+            descriptor.vertexFunction = library.makeFunction(name: "kairoParticleVertex")
+            descriptor.fragmentFunction = library.makeFunction(name: "kairoParticleFragment")
+            descriptor.colorAttachments[0].destinationRGBBlendFactor = .one
+            descriptor.colorAttachments[0].destinationAlphaBlendFactor = .one
+            do { particlePipeline = try device.makeRenderPipelineState(descriptor: descriptor) }
+            catch { particlePipeline = nil }
             view.delegate = self
         }
 
@@ -98,7 +111,7 @@ struct KairoRingMetalView: UIViewRepresentable {
         func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) { self.size = size }
 
         func draw(in view: MTKView) {
-            guard let pipeline, let queue, let descriptor = view.currentRenderPassDescriptor,
+            guard view.window != nil, let pipeline, let particlePipeline, let queue, let descriptor = view.currentRenderPassDescriptor,
                   let drawable = view.currentDrawable,
                   let buffer = queue.makeCommandBuffer(),
                   let encoder = buffer.makeRenderCommandEncoder(descriptor: descriptor) else { return }
@@ -111,9 +124,15 @@ struct KairoRingMetalView: UIViewRepresentable {
             // quietly freezing on a shelf that never sleeps.
             let elapsed = Float(CFAbsoluteTimeGetCurrent() - start)
             uniforms.paramsA.x = reducedMotion ? 0 : elapsed.truncatingRemainder(dividingBy: 43_200)
+            uniforms.viewport.z = Float(view.drawableSize.width / max(view.bounds.width, 1))
+            contactCurrent = reducedMotion ? contactTarget : contactCurrent + (contactTarget - contactCurrent) * 0.15
             uniforms.bind(encoder)
             encoder.setRenderPipelineState(pipeline)
             encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+            encoder.setRenderPipelineState(particlePipeline)
+            var touch = contactCurrent
+            encoder.setVertexBytes(&touch, length: MemoryLayout<SIMD4<Float>>.stride, index: 1)
+            encoder.drawPrimitives(type: .point, vertexStart: 0, vertexCount: 24_000)
             encoder.endEncoding()
             buffer.present(drawable)
             buffer.commit()

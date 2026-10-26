@@ -18,7 +18,7 @@ struct SurfaceOutputView: View {
                     .accessibilityLabel("Dismiss Kairo's display")
             }
             ScrollView {
-                Text(text).font(.system(size: 20, design: .serif)).lineSpacing(5)
+                Text(text).font(.system(size: 20, design: .rounded)).lineSpacing(5)
                     .foregroundStyle(KairoTheme.prose).textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }.frame(maxHeight: 190)

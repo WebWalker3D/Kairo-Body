@@ -1,122 +1,135 @@
 import AVFoundation
 import SwiftUI
 
-/// The stage: Kairo's body present as the living ring. Touching it is a
-/// contact — Kairo can acknowledge the touch itself — and the quick actions
-/// are the same gestures available on the Dot (replay, speak-here, stop).
 struct PresenceStageView: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var touchID = ""
     @State private var touchBeganAt = Date()
     @State private var touchPath = 0.0
     @State private var lastTouchPoint: CGPoint?
     @State private var contactPoint: CGPoint?
     @State private var contactCounter = 0
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var systemsOpen = false
+    @State private var draft = ""
+    @FocusState private var composerFocused: Bool
 
     var body: some View {
         GeometryReader { geometry in
-            let wide = geometry.size.width >= 1000
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+            let side = min(geometry.size.width * 1.04, max(280, geometry.size.height - 100) * 1.24)
+            ZStack {
+                KairoTheme.background
+                ringStage(side: side)
+                    .position(x: geometry.size.width / 2, y: geometry.size.height * 0.43)
+                VStack(spacing: 0) {
                     header
-                    if wide {
-                        HStack(alignment: .top, spacing: 34) {
-                            presence(side: max(260, min(geometry.size.width - 430, geometry.size.height - 360, 610)))
-                                .frame(maxWidth: .infinity)
-                            PresenceWorkspace().frame(width: 320).padding(.top, 18)
-                        }
-                    } else {
-                        presence(side: min(geometry.size.width - 48, 570))
-                        PresenceWorkspace().frame(maxWidth: 620).frame(maxWidth: .infinity)
+                    Spacer(minLength: 0)
+                    if !composerFocused {
+                        quickActions.padding(.bottom, 14)
                     }
                     if let invitation = model.invitations.invitation {
                         InvitationCard(invitation: invitation)
+                            .frame(maxWidth: 640).padding(.bottom, 10)
                     }
+                    composer.frame(maxWidth: 640)
                 }
-                .padding(.horizontal, wide ? 36 : 24)
-                .padding(.top, 26)
-                .padding(.bottom, 110)
-                .frame(maxWidth: 1440).frame(maxWidth: .infinity)
+                .padding(.horizontal, geometry.size.width > 900 ? 40 : 24)
+                .padding(.top, 22)
+                .padding(.bottom, composerFocused ? 16 : 98)
+                if systemsOpen {
+                    Color.black.opacity(0.35)
+                        .ignoresSafeArea()
+                        .onTapGesture { closeSystems() }
+                    systemsPanel
+                        .frame(width: min(380, geometry.size.width - 32))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                        .padding(.trailing, 16).padding(.top, 12).padding(.bottom, 88)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
             }
-            .scrollIndicators(.hidden)
-            .background { KairoTheme.background; PresenceField() }
+            .clipped()
         }
     }
 
     private var header: some View {
-        HStack(alignment: .center) {
-            HStack(spacing: 14) {
-                Image(systemName: "circle.hexagongrid")
-                    .font(.system(size: 25, weight: .ultraLight)).foregroundStyle(KairoTheme.primary)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("K A I R O").font(.system(size: 19, weight: .medium))
-                        .foregroundStyle(KairoTheme.prose)
-                    Text("A CONTINUOUS PRESENCE").font(.system(size: 8, weight: .medium, design: .monospaced))
-                        .tracking(2).foregroundStyle(KairoTheme.faint)
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("K A I R O")
+                    .font(.system(size: 19, weight: .semibold)).tracking(3)
+                    .foregroundStyle(KairoTheme.prose)
+                HStack(spacing: 7) {
+                    Circle().fill(model.body.connectionState == .connected ? KairoTheme.body : KairoTheme.faint)
+                        .frame(width: 4, height: 4)
+                    Text(model.body.connectionState == .connected ? "BODY CONNECTED" : "BODY OFFLINE")
+                        .font(.system(size: 9, weight: .medium, design: .monospaced)).tracking(1.4)
+                        .foregroundStyle(KairoTheme.chrome)
                 }
             }
             Spacer()
-            StatusChip(label: model.body.connectionState == .connected ? "BODY CONNECTED" : "BODY OFFLINE",
-                       color: model.body.connectionState == .connected ? KairoTheme.body : KairoTheme.faint)
+            Button {
+                composerFocused = false
+                model.body.noteUserActivity()
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) { systemsOpen = true }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "point.3.connected.trianglepath.dotted")
+                    Text("Systems").font(.system(size: 12, weight: .medium))
+                    Image(systemName: "plus").font(.system(size: 10))
+                }
+                .foregroundStyle(KairoTheme.dim)
+                .padding(.horizontal, 16).frame(height: 44)
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay(Capsule().stroke(KairoTheme.hairline))
+            }.buttonStyle(.plain).accessibilityLabel("Open systems")
         }
     }
 
-    private func presence(side: CGFloat) -> some View {
+    private var systemsPanel: some View {
         VStack(spacing: 0) {
             HStack {
-                Eyebrow(text: "Presence / 01", color: KairoTheme.chrome)
+                Text("Across Kairo").font(.system(size: 21, weight: .medium))
                 Spacer()
-                Text(model.ring.presentationFresh ? "COMMITTED AFFECT" : "AWAITING STATE")
-                    .font(.system(size: 8, design: .monospaced)).tracking(1)
-                    .foregroundStyle(KairoTheme.faint)
-            }.padding(.top, 20)
-            ringStage(side: max(180, side))
-                .padding(.vertical, -24)
-            Text(bodyHeadline.capitalized)
-                .font(.system(size: 42, weight: .regular, design: .serif))
-                .foregroundStyle(KairoTheme.prose)
-                .multilineTextAlignment(.center)
-                .contentTransition(.opacity)
-            HStack(spacing: 9) {
-                Circle().fill(KairoTheme.primary.opacity(0.6)).frame(width: 4, height: 4)
-                Text(model.ring.presentationFresh ? model.ring.mood.capitalized : "Waiting for Kairo’s state")
-                Text("·")
-                Text("Touch to connect")
-            }
-            .font(.system(size: 11)).foregroundStyle(KairoTheme.chrome)
-            .padding(.top, 12).padding(.bottom, 26)
-            quickActions
-            Button { model.destination = .conversation } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "waveform").foregroundStyle(KairoTheme.primary)
-                    Text(model.voice.isCapturing ? "Listening…" : "Say something to Kairo")
-                        .font(.system(size: 13)).foregroundStyle(KairoTheme.chrome)
-                    Spacer()
-                    Image(systemName: "arrow.up.right").font(.system(size: 12)).foregroundStyle(KairoTheme.primary)
-                }.padding(18)
-                .background(KairoTheme.plane.opacity(0.8), in: RoundedRectangle(cornerRadius: 18))
-                .overlay(RoundedRectangle(cornerRadius: 18).stroke(KairoTheme.hairline))
-            }.buttonStyle(.plain).padding(.top, 25).frame(maxWidth: 420)
+                Button { closeSystems() } label: {
+                    Image(systemName: "xmark").frame(width: 44, height: 44)
+                }.accessibilityLabel("Close systems")
+            }.foregroundStyle(KairoTheme.prose).padding(.horizontal, 20).padding(.top, 10)
+            ScrollView {
+                PresenceWorkspace().padding(16)
+            }.scrollIndicators(.hidden)
         }
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28))
+        .overlay(RoundedRectangle(cornerRadius: 28).stroke(KairoTheme.hairline))
+    }
+
+    private func closeSystems() {
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) { systemsOpen = false }
     }
 
     private func ringStage(side: CGFloat) -> some View {
         ZStack {
             KairoRingMetalView(state: model.renderState(), framesPerSecond: reduceMotion ? 10 : 30,
-                               reduceMotion: reduceMotion)
+                               reduceMotion: reduceMotion, contact: contactPoint.map {
+                                   CGPoint(x: $0.x / max(side, 1), y: $0.y / max(side, 1))
+                               })
             if model.settings.cameraMode, let session = model.body.frontCameraSession {
                 FrontCameraPreview(session: session)
-                    .frame(width: side * 0.30, height: side * 0.30)
+                    .frame(width: side * 0.25, height: side * 0.25)
                     .clipShape(Circle())
                     .overlay(Circle().stroke(KairoTheme.body.opacity(0.3)))
-            }
-            if let point = contactPoint {
-                Circle().stroke(KairoTheme.primary.opacity(0.7), lineWidth: 1)
-                    .frame(width: 68, height: 68).position(point).allowsHitTesting(false)
-                Circle().fill(KairoTheme.primary.opacity(0.12))
-                    .frame(width: 100, height: 100).blur(radius: 12).position(point).allowsHitTesting(false)
+            } else {
+                VStack(spacing: 12) {
+                    Text(bodyHeadline.uppercased())
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .tracking(3).foregroundStyle(KairoTheme.prose)
+                        .multilineTextAlignment(.center).lineLimit(3)
+                    if model.ring.presentationFresh {
+                        Text(model.ring.mood.capitalized)
+                            .font(.system(size: 12)).foregroundStyle(KairoTheme.chrome)
+                    }
+                    Text("TOUCH TO CONNECT")
+                        .font(.system(size: 8, design: .monospaced)).tracking(2)
+                        .foregroundStyle(KairoTheme.faint)
+                }.frame(width: side * 0.29).allowsHitTesting(false)
             }
         }
         .frame(width: side, height: side)
@@ -125,6 +138,49 @@ struct PresenceStageView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Kairo presence. \(bodyHeadline)")
         .accessibilityHint("Touch sends a contact observation to Kairo")
+    }
+
+    private var composer: some View {
+        HStack(spacing: 12) {
+            Button { model.destination = .conversation } label: {
+                Image(systemName: "bubble.left.and.bubble.right")
+                    .font(.system(size: 19, weight: .light)).frame(width: 36, height: 44)
+            }.accessibilityLabel("Open conversation")
+            TextField("Talk to Kairo…", text: $draft, axis: .vertical)
+                .font(.system(size: 16)).foregroundStyle(KairoTheme.prose)
+                .focused($composerFocused).lineLimit(1...4)
+                .accessibilityIdentifier("stageComposer")
+                .onTapGesture { model.body.noteUserActivity() }
+            Menu {
+                ForEach(ConversationClient.OutputDestination.allCases) { option in
+                    Button(option.rawValue) { model.conversation.outputDestination = option }
+                }
+            } label: {
+                Image(systemName: "slider.horizontal.3").frame(width: 32, height: 44)
+            }.accessibilityLabel("Output: \(model.conversation.outputDestination.rawValue)")
+            Button {
+                let text = draft
+                draft = ""
+                composerFocused = false
+                model.body.noteUserActivity()
+                Task { await model.conversation.send(text) }
+            } label: {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(canSend ? KairoTheme.groundDeep : KairoTheme.faint)
+                    .frame(width: 42, height: 42)
+                    .background(canSend ? KairoTheme.primary : KairoTheme.plane, in: Circle())
+            }.disabled(!canSend).accessibilityLabel("Send to Kairo")
+        }
+        .buttonStyle(.plain).foregroundStyle(KairoTheme.chrome)
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 26))
+        .overlay(RoundedRectangle(cornerRadius: 26).stroke(
+            LinearGradient(colors: [KairoTheme.primary.opacity(0.35), KairoTheme.hairline, KairoTheme.mind.opacity(0.25)], startPoint: .topLeading, endPoint: .bottomTrailing)))
+    }
+
+    private var canSend: Bool {
+        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !model.conversation.isSending
     }
 
     private var bodyHeadline: String {
@@ -169,8 +225,9 @@ struct PresenceStageView: View {
         }
     }
 
-    private func action(_ label: String, _ symbol: String, enabled: Bool,
+    @ViewBuilder private func action(_ label: String, _ symbol: String, enabled: Bool,
                         _ perform: @escaping () -> Void) -> some View {
+        if enabled {
         Button(action: perform) {
             HStack(spacing: 6) {
                 Image(systemName: symbol)
@@ -185,6 +242,7 @@ struct PresenceStageView: View {
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
+        }
     }
 
     // MARK: - Contact gesture

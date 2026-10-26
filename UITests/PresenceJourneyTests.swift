@@ -10,10 +10,19 @@ final class PresenceJourneyTests: XCTestCase {
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue(app.staticTexts["K A I R O"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Open systems"].exists)
-        XCTAssertTrue(app.textFields["Talk to Kairo…"].exists)
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "stageComposer").firstMatch.exists)
         capture("Presence-landscape")
         XCUIDevice.shared.orientation = .portrait
         capture("Presence-portrait")
+        let composer = app.descendants(matching: .any).matching(identifier: "stageComposer").firstMatch
+        composer.tap()
+        composer.typeText("A draft stays on this body")
+        XCTAssertTrue(app.buttons["Send to Kairo"].isHittable)
+        capture("Presence-keyboard")
+        app.buttons["Open systems"].tap()
+        XCTAssertTrue(app.buttons["Close systems"].waitForExistence(timeout: 5))
+        capture("Presence-systems")
+        app.buttons["Close systems"].tap()
         app.buttons["Conversation"].tap()
         XCTAssertTrue(app.staticTexts["Conversations"].waitForExistence(timeout: 5))
         capture("Conversation-portrait")

@@ -47,7 +47,7 @@ struct TranscriptView: View {
     private var header: some View {
         HStack(spacing: 10) {
             Text("Conversations")
-                .font(.system(size: 30, weight: .regular, design: .serif))
+                .font(.system(size: 30, weight: .regular, design: .rounded))
                 .foregroundStyle(KairoTheme.prose)
             if model.feed.following { StatusChip(label: "LIVE", color: KairoTheme.body) }
             if model.feed.processing { StatusChip(label: "KAIRO WORKING", color: KairoTheme.mind) }
@@ -210,7 +210,7 @@ struct TurnCard: View {
             if !turn.answer.isEmpty {
                 Divider().overlay(KairoTheme.hairline)
                 Text(turn.answer)
-                    .font(.system(size: 17, design: .serif))
+                    .font(.system(size: 17, design: .rounded))
                     .lineSpacing(6)
                     .foregroundStyle(KairoTheme.prose.opacity(0.92))
                     .textSelection(.enabled)

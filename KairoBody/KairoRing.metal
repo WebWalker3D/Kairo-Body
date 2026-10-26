@@ -1,229 +1,101 @@
 #include <metal_stdlib>
 using namespace metal;
+#define TAU 6.28318530718
 
-#define TAU 6.283185307179586
-#define PI  3.141592653589793
-
-// The iPad's living ring: twelve emitters around a core, in the same physical
-// arrangement measured on the Dot. Every motion here answers a real signal:
-// fresh Dot output levels, the composed phase (speaking / thinking /
-// listening), and the committed mood's own motion mode - pulse, orbit, spark
-// or breathe - exactly the vocabulary the 1.0.x body and the Dot animate with.
-// While Kairo speaks through this iPad the Dot's stream may be stale, and the
-// beat is synthesized from the observed fact of speech itself, as 1.0.x did.
-
+// This ABI is shared with KairoRingUniformsStorage: seven float4s + 12 emitters.
 struct KairoRingUniforms {
-    float4 viewport;        // width, height, centre x, centre y
-    float4 mood;            // committed affect primary (rgb)
-    float4 accent;          // mood accent (rgb)
-    float4 core;            // core colour (rgb)
-    float4 paramsA;         // time, idle breath amplitude, phase energy, overall intensity
-    float4 paramsB;         // ring radius, emitter width, screensaver fade, sleeping (1) flag
-    float4 paramsC;         // activity (0 idle, 1 listening, 2 speaking, 3 thinking), live level, motion mode (0 breathe, 1 orbit, 2 pulse, 3 spark), reserved
-    float4 emitters[12];    // x: level 0..1, y: phase seed, z: reserved, w: reserved
+    float4 viewport, mood, accent, core, paramsA, paramsB, paramsC;
+    float4 emitters[12];
 };
-
-struct KairoRingVertexOutput {
+struct FieldVertex { float4 position [[position]]; float2 uv; };
+vertex FieldVertex kairoRingVertex(uint id [[vertex_id]]) {
+    const float2 p[3] = {float2(-1,-3), float2(3,1), float2(-1,1)};
+    return {float4(p[id],0,1), p[id]*.5+.5};
+}
+fragment float4 kairoRingFragment(FieldVertex in [[stage_in]], constant KairoRingUniforms &u [[buffer(0)]]) {
+    float2 p = (in.uv-.5)*2;
+    float r = length(p * float2(1,1.16));
+    float a = atan2(p.y,p.x);
+    float halo = exp(-pow((r-.54)/.20,2.0));
+    float light = halo * (.035 + .025*sin(a*2+u.paramsA.x*.08));
+    float sleep = u.paramsB.w > .5 ? .14 : 1;
+    float3 c = u.mood.rgb * light * u.paramsA.w * u.paramsB.z * sleep;
+    return float4(c, max(c.r,max(c.g,c.b)));
+}
+static float hash(float p) { return fract(sin(p*127.1+311.7)*43758.5453); }
+struct ParticleVertex {
     float4 position [[position]];
-    float2 uv;
+    float size [[point_size]];
+    float3 colour;
+    float light;
 };
-
-vertex KairoRingVertexOutput kairoRingVertex(uint index [[vertex_id]]) {
-    const float2 positions[3] = {
-        float2(-1.0, -3.0),
-        float2(3.0, 1.0),
-        float2(-1.0, 1.0),
-    };
-    KairoRingVertexOutput output;
-    output.position = float4(positions[index], 0.0, 1.0);
-    output.uv = positions[index] * 0.5 + float2(0.5);
-    return output;
+vertex ParticleVertex kairoParticleVertex(uint id [[vertex_id]],
+    constant KairoRingUniforms &u [[buffer(0)]], constant float4 &contact [[buffer(1)]]) {
+    float t = u.paramsA.x;
+    float energy = clamp(u.paramsA.z,0.0,1.0);
+    float activity = u.paramsC.x;
+    float live = clamp(u.paramsC.y,0.0,1.0);
+    float seed = hash(float(id)+11);
+    // 32 flowing filaments, 640 particles apiece. A dispersed outer field
+    // occupies the remaining points. No per-frame allocations or CPU loops.
+    float strand = floor(float(id)/640);
+    float along = float(id%640)/640;
+    float speed = .045 + .012*hash(strand);
+    if (activity > 2.5) speed *= 2.2; // actual thinking
+    float a = along*TAU + t*speed;
+    float v = strand*2.399963 + a*3 + t*.13;
+    uint emitter = uint(floor(fract((-a/TAU)-.5)*12)) % 12;
+    float signal = clamp(u.emitters[emitter].x,0.0,1.0);
+    float pulse = 0;
+    if (u.paramsC.z > 2.5) pulse = pow(max(0.0,sin(t*2.6+a*3)),12.0)*.025;
+    else if (u.paramsC.z > 1.5) pulse = pow(max(0.0,sin(t*3.3)),6.0)*.025;
+    float breath = sin(t*.8)*u.paramsA.y*.018;
+    float wave = sin(a*5-t*.23+strand*.2);
+    float tube = .125 + energy*.025 + signal*.035;
+    if (activity > 1.5 && activity < 2.5) tube += sin(a*9+t*8)*live*.016;
+    float r = .53 + tube*sin(v) + .027*wave + breath + pulse;
+    float3 p = float3(r*cos(a),r*sin(a),tube*cos(v)+.065*sin(a*3+t*.14));
+    // Dust follows neighbouring streamlines, with broad depth and sparse stars.
+    bool dust = id >= 20480;
+    if (dust) {
+        r = .36+hash(float(id)*.7)*.47;
+        a = seed*TAU+t*(.012+hash(float(id)*.31)*.025);
+        p = float3(r*cos(a),r*sin(a), (hash(float(id)*.9)-.5)*.55);
+    }
+    // Camera tilt and slow precession reveal near and far surfaces.
+    float tilt = .48 + sin(t*.09)*.10;
+    p.yz = float2(p.y*cos(tilt)-p.z*sin(tilt),p.y*sin(tilt)+p.z*cos(tilt));
+    float yaw = .16*sin(t*.07+.8);
+    p.xz = float2(p.x*cos(yaw)+p.z*sin(yaw),-p.x*sin(yaw)+p.z*cos(yaw));
+    float perspective = 2.5/(2.5-p.z);
+    float2 screen = p.xy*perspective;
+    // Contact is local geometry feedback, not an invented server response.
+    float2 delta = contact.xy-screen;
+    float influence = exp(-dot(delta,delta)*16)*contact.z;
+    screen += delta*influence*.23;
+    screen += float2(-delta.y,delta.x)*influence*.18;
+    float depth = clamp((p.z+.4)/.8,0.0,1.0);
+    float sheen = pow(.5+.5*sin(a-t*.12),6.0);
+    float3 chroma = mix(u.mood.rgb*.72,u.accent.rgb,depth*.32);
+    // Spectral scattering on the shadow edge; the committed palette remains
+    // the source of the hue, including warm/concerned/reflective expressions.
+    float3 scatter = float3(u.mood.b*.95,u.mood.r*.45,u.mood.g*1.2);
+    chroma = mix(chroma,scatter,(1-depth)*.60);
+    float lum = (.48+depth*.65+sheen*.55+signal*.7)*u.paramsA.w;
+    if (activity > .5 && activity < 1.5) lum *= 1+live*.3*(.5+.5*sin(t*2.4));
+    lum *= u.paramsB.z * (u.paramsB.w > .5 ? .14 : 1);
+    ParticleVertex out;
+    out.position = float4(screen,0,1);
+    // Point sizes are drawable pixels; viewport.z stores the actual scale.
+    float pixelScale = max(u.viewport.z,1.0);
+    out.size = (dust ? 1.3+pow(seed,12.0)*6 : 2.0+depth*2.1+sheen*1.6)*pixelScale;
+    out.colour = chroma;
+    out.light = lum * (dust ? .23+pow(seed,16.0) : .62);
+    return out;
 }
-
-static float mote(float2 p, float2 centre, float radius) {
-    const float distance = length((p - centre) / max(radius, 0.001));
-    return exp(-distance * distance * 5.5);
-}
-
-// Triangular keyframe like the 1.0.x motion curves: a flare centred at
-// `centre` within the cycle, half-width `width`, eased.
-static float flare(float cycle, float centre, float width) {
-    const float c = cycle - floor(cycle);
-    const float env = clamp(1.0 - abs(c - centre) / max(width, 0.001), 0.0, 1.0);
-    return env * env * (3.0 - 2.0 * env);
-}
-
-static float wrapAngle(float a) {
-    return a - TAU * floor((a + PI) / TAU);
-}
-
-fragment float4 kairoRingFragment(
-    KairoRingVertexOutput input [[stage_in]],
-    constant KairoRingUniforms &u [[buffer(0)]]
-) {
-    const float2 viewport = max(u.viewport.xy, float2(1.0));
-    const float2 aspect = float2(viewport.x / max(viewport.x, viewport.y),
-                                 viewport.y / max(viewport.x, viewport.y));
-    // uv is in [0,1]; centre it on the ring.
-    const float2 p = (input.uv - 0.5) * 2.0 * aspect;
-    const float time = u.paramsA.x;
-    const float breath = u.paramsA.y;
-    const float energy = u.paramsA.z;
-    const float intensity = clamp(u.paramsA.w, 0.0, 1.0);
-    const float baseRadius = u.paramsB.x;
-    const float emitterWidth = u.paramsB.y;
-    const float fade = clamp(u.paramsB.z, 0.0, 1.0);
-    const float sleeping = u.paramsB.w;
-    const float activity = u.paramsC.x;
-    const float live = clamp(u.paramsC.y, 0.0, 1.0);
-    const float mode = u.paramsC.z;
-
-    // A slow breath only when the posture is resting; focused light stays steady.
-    const float idleBreath = 1.0 + breath * sin(time * 0.9) * (1.0 - energy * 0.8);
-
-    // --- the mood's own motion, as the 1.0.x keyframe curves animated it ---
-    const float amp = 0.35 + 0.65 * energy;
-    float scaleKick = 0.0;
-    float glowBoost = 0.0;
-    float widthBoost = 0.0;
-    if (mode > 2.5) {            // spark: three quick flares per 2.4 s
-        const float e = max(flare(time / 2.4, 0.06, 0.10),
-                            max(flare(time / 2.4, 0.36, 0.10) * 0.95,
-                                flare(time / 2.4, 0.68, 0.09) * 0.85));
-        scaleKick += 0.05 * e * amp;
-        glowBoost += 0.55 * e * amp;
-    } else if (mode > 1.5) {     // pulse: one heartbeat every 1.9 s
-        const float e = flare(time / 1.9, 0.10, 0.32);
-        scaleKick += 0.07 * e * amp;
-        glowBoost += 0.50 * e * amp;
-    } else if (mode > 0.5) {     // orbit: brightness travels the ring once per 6.5 s
-        scaleKick += 0.015 * sin(TAU * time / 6.5);
-        glowBoost += 0.10 * (0.5 + 0.5 * sin(TAU * time / 6.5));
-    } else {                     // breathe: one long swell every 4.6 s
-        scaleKick += 0.05 * sin(TAU * time / 4.6) * amp;
-        glowBoost += 0.12 * (0.5 + 0.5 * sin(TAU * time / 4.6)) * amp;
-    }
-
-    // --- what Kairo is doing right now, as 1.0.x animated it ---
-    float scanPhase = 0.0;
-    if (activity > 0.5 && activity < 1.5) {          // listening: a slow attentive swell
-        const float wave = 0.5 + 0.5 * sin(time * TAU * 0.7);
-        glowBoost += (0.06 * wave + 0.24 * live);
-        scaleKick += 0.012 * wave + 0.030 * live;
-        widthBoost += 0.05 * wave + 0.14 * live;
-    } else if (activity > 1.5 && activity < 2.5) {   // speaking: the beat itself
-        const float wave = 0.5 + 0.5 * sin(time * TAU * 2.2);
-        glowBoost += 0.13 * wave + 0.24 * live;
-        scaleKick += 0.025 * wave + 0.025 * live;
-        widthBoost += 0.08 * wave + 0.13 * live;
-    } else if (activity > 2.5) {                     // thinking: a pulse travels around the ring
-        const float wave = 0.5 + 0.5 * sin(time * TAU * 0.42);
-        glowBoost += 0.13 * wave * live;
-        scaleKick += -0.008 + 0.025 * wave * live;
-        scanPhase = TAU * fract(time * 0.42);
-    }
-    const float radius = baseRadius * clamp(1.0 + scaleKick, 0.82, 1.22);
-
-    // Core: soft radial glow - brighter with presence, flaring with mood
-    // motion and with whatever Kairo is doing.
-    const float coreDistance = length(p) / radius;
-    float coreGlow = exp(-coreDistance * coreDistance * 6.0)
-        * (0.22 + energy * 0.5 + glowBoost * 0.55) * idleBreath;
-
-    // Guide ring: a faint annulus marking where the emitters live; a thinking
-    // scan brightens the arc the pulse is crossing.
-    const float annulus = abs(coreDistance - 1.0);
-    const float theta = atan2(p.y, p.x);
-    float guide = exp(-annulus * annulus * 900.0) * (0.10 + energy * 0.16 + glowBoost * 0.10);
-    if (scanPhase != 0.0) {
-        const float d = wrapAngle(theta - scanPhase);
-        guide += exp(-d * d * 5.0) * (0.12 + 0.28 * live);
-    }
-
-    // Twelve measured emitters.
-    float emitterGlow = 0.0;
-    float3 emitterMix = float3(0.0);
-    for (uint i = 0u; i < 12u; i++) {
-        float level = clamp(u.emitters[i].x, 0.0, 1.0);
-        const float seed = u.emitters[i].y;
-        // Emitter 11 faces the person; ids increase clockwise from above,
-        // matching Blaine's physical calibration on the Dot.
-        const float angle = (-0.5 * TAU - float(i) * (TAU / 12.0)) + seed * 0.02;
-
-        // When a fresh Dot waveform is quiet or absent, the phase itself
-        // drives the emitters so speech, thought and attention stay visible
-        // on this body - the same rule 1.0.x used for the Dot's own pulse.
-        if (activity > 0.5) {
-            float synth = 0.0;
-            if (activity < 1.5) {                    // listening swell, breathing apart per emitter
-                const float wave = 0.5 + 0.5 * sin(time * TAU * 0.7 + seed * 3.1);
-                synth = live * (0.10 + 0.22 * wave);
-            } else if (activity < 2.5) {             // speaking: 2.2 Hz beat, each emitter bobbing
-                const float w = abs(sin(time * PI * 2.2 + float(i) * 0.55 + seed * 1.7));
-                synth = live * (0.18 + 0.60 * w);
-            } else {                                 // thinking: one light circling the ring
-                const float d = wrapAngle(angle - scanPhase);
-                synth = live * 0.85 * exp(-d * d * 5.0);
-            }
-            level = max(level, synth);
-        }
-        if (level <= 0.002) { continue; }
-
-        const float2 centre = float2(cos(angle), sin(angle)) * radius;
-        const float sparkle = 1.0 + 0.08 * sin(time * 2.2 + seed * 6.28);
-        // Orbit moods travel brightness around the ring like the Dot's tilt.
-        const float orbitGain = mode > 0.5 && mode < 1.5
-            ? 1.0 + 0.16 * amp * sin(angle - TAU * time / 6.5) : 1.0;
-        const float contribution = mote(p, centre,
-                radius * emitterWidth * (0.55 + 0.45 * level) * (1.0 + widthBoost))
-            * level * level * sparkle * orbitGain;
-        emitterGlow += contribution;
-        emitterMix += mix(u.mood.rgb, u.accent.rgb, level) * contribution;
-    }
-
-    // Coherent orbital filaments make a spatial presence from the same
-    // measured phase/affect. These are expressive light, never telemetry.
-    const float r = length(p);
-    float silk = 0.0;
-    float corona = 0.0;
-    for (uint strand = 0; strand < 5; strand++) {
-        const float k = float(strand);
-        const float drift = time * (0.10 + k * 0.015);
-        const float wave = sin(theta * (3.0 + k) + drift) * 0.018
-                         + sin(theta * 7.0 - drift * 1.7 + k) * 0.009;
-        const float orbit = radius * (1.12 + k * 0.10) + wave * (0.4 + energy);
-        const float d = abs(r - orbit);
-        const float arc = 0.35 + 0.65 * pow(0.5 + 0.5 * cos(theta - drift - k * 1.8), 3.0);
-        silk += exp(-d * d * 180000.0) * arc * (0.18 + energy * 0.13);
-        corona += exp(-d * d * 1400.0) * arc * 0.035;
-    }
-    // A soft atmosphere with a dark centre gives the ring depth without
-    // covering the twelve original directional emitters.
-    const float atmosphere = exp(-pow((r - radius * 0.94) / 0.13, 2.0));
-    const float innerEdge = exp(-pow((r - radius * 0.72) / 0.006, 2.0));
-    const float contour = 0.5 + 0.5 * sin(theta * 2.0 + time * 0.12);
-
-    // Sleeping posture keeps a barely-there ember, like the Dot at timeout.
-    const float sleepMix = sleeping * 0.12;
-
-    float3 colour = float3(0.0);
-    colour += u.core.rgb * coreGlow * (1.0 - sleepMix) * intensity;
-    colour += u.mood.rgb * guide * (0.6 + 0.4 * energy) * intensity;
-    if (emitterGlow > 0.0) {
-        colour += emitterMix * 1.35 * intensity;
-    }
-    if (sleeping > 0.5) {
-        // Dark clock stage: the ring rests; the timekeeping is drawn elsewhere.
-        colour *= 0.14;
-    }
-    colour += mix(u.mood.rgb, u.accent.rgb, contour) * (silk * 2.5 + corona * 1.6) * intensity;
-    colour += u.mood.rgb * atmosphere * 0.12 * intensity;
-    colour += u.accent.rgb * innerEdge * 0.035 * intensity;
-    colour *= fade;
-    colour = 1.0 - exp(-colour * 1.25);
-
-    const float alpha = clamp(
-        length(colour) * 1.35 + (1.0 - sleeping) * guide * 0.15,
-        0.0, 1.0) * fade;
-    return float4(colour, alpha);
+fragment float4 kairoParticleFragment(ParticleVertex in [[stage_in]], float2 point [[point_coord]]) {
+    float r2 = dot(point-.5,point-.5)*4;
+    float glow = exp(-r2*4.5)*.55 + exp(-r2*26)*1.15;
+    float3 colour = in.colour * glow * in.light * (1.0-smoothstep(.55,1.0,r2));
+    return float4(colour, clamp(max(colour.r,max(colour.g,colour.b)),0.0,1.0));
 }

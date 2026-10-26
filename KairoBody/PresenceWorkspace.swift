@@ -12,13 +12,6 @@ struct PresenceWorkspace: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HStack {
-                Eyebrow(text: "Across Kairo", color: KairoTheme.chrome)
-                Spacer()
-                Text("01 / LIVE FIELD")
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(KairoTheme.faint)
-            }
             if model.settings.echoTranscriptVisible {
                 activityCard
             } else {
@@ -36,7 +29,7 @@ struct PresenceWorkspace: View {
             if let state = model.feed.liveState, model.feed.connectionTrouble == nil {
                 PlaneCard {
                     HStack {
-                        Eyebrow(text: "Inner weather", color: KairoTheme.mind)
+                        Eyebrow(text: "Committed state", color: KairoTheme.mind)
                         Spacer()
                         Text("r\(state.revision)").font(.caption.monospaced()).foregroundStyle(KairoTheme.faint)
                     }
@@ -66,7 +59,7 @@ struct PresenceWorkspace: View {
             }
             if let turn = model.feed.turns.last {
                 Text(turn.active ? turn.prompt : (turn.answer.isEmpty ? turn.prompt : turn.answer))
-                    .font(.system(size: 19, weight: .regular, design: .serif))
+                    .font(.system(size: 19, weight: .regular, design: .rounded))
                     .foregroundStyle(KairoTheme.prose)
                     .lineSpacing(5).lineLimit(6)
                 HStack {
@@ -81,8 +74,8 @@ struct PresenceWorkspace: View {
                         .font(.caption2).foregroundStyle(KairoTheme.mind).lineLimit(2)
                 }
             } else {
-                Text("A conversation that\ntravels with you.")
-                    .font(.system(size: 25, weight: .regular, design: .serif))
+                Text("Your shared conversation")
+                    .font(.system(size: 25, weight: .regular, design: .rounded))
                     .foregroundStyle(KairoTheme.prose).lineSpacing(4)
                 Text(model.pairing.isPaired
                      ? "The Dot, Discord and this iPad share the same thread of presence. Waiting for the conversation feed."
@@ -151,28 +144,5 @@ struct PresenceWorkspace: View {
             .background(color.opacity(0.045), in: RoundedRectangle(cornerRadius: 20))
             .overlay(RoundedRectangle(cornerRadius: 20).stroke(color.opacity(0.16)))
         }.buttonStyle(.plain)
-    }
-}
-
-/// Decorative coordinates communicate a continuous space, not fabricated
-/// telemetry. All moving light remains in the single Metal presence view.
-struct PresenceField: View {
-    var body: some View {
-        GeometryReader { geo in
-            Canvas { context, size in
-                for x in stride(from: 24.0, to: size.width, by: 48) {
-                    for y in stride(from: 24.0, to: size.height, by: 48) {
-                        context.fill(Path(ellipseIn: CGRect(x: x, y: y, width: 1, height: 1)), with: .color(.white.opacity(0.07)))
-                    }
-                }
-                let line = Path { p in
-                    p.move(to: CGPoint(x: 0, y: size.height * 0.72))
-                    p.addLine(to: CGPoint(x: size.width, y: size.height * 0.72))
-                }
-                context.stroke(line, with: .color(KairoTheme.primary.opacity(0.06)), lineWidth: 1)
-            }
-            RadialGradient(colors: [KairoTheme.primary.opacity(0.07), .clear], center: .center, startRadius: 0, endRadius: max(geo.size.width, 1) * 0.6)
-        }
-        .allowsHitTesting(false).accessibilityHidden(true)
     }
 }

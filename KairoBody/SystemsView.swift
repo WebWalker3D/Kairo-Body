@@ -49,7 +49,7 @@ struct CapabilityCatalogue: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Kairo’s systems").font(.system(size: 27, design: .serif)).foregroundStyle(KairoTheme.prose)
+                    Text("Kairo’s systems").font(.system(size: 27, design: .rounded)).foregroundStyle(KairoTheme.prose)
                     Text("Capabilities published by Kairo. Enabling and authorization stay with the server.")
                         .font(.caption).foregroundStyle(KairoTheme.chrome)
                 }

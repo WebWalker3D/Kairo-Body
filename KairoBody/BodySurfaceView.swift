@@ -13,7 +13,7 @@ struct BodySurfaceView: View {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 10) {
                     Text("This body")
-                        .font(.system(size: 30, weight: .regular, design: .serif))
+                        .font(.system(size: 30, weight: .regular, design: .rounded))
                         .foregroundStyle(KairoTheme.prose)
                     StatusChip(label: model.body.connectionState.rawValue.uppercased(),
                                color: model.body.connectionState == .connected ? KairoTheme.body : KairoTheme.warn)

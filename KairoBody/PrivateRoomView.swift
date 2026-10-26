@@ -37,7 +37,7 @@ struct PrivateRoomView: View {
     private var header: some View {
         HStack(spacing: 10) {
             Text("Private room")
-                .font(.system(size: 30, weight: .regular, design: .serif))
+                .font(.system(size: 30, weight: .regular, design: .rounded))
                 .foregroundStyle(KairoTheme.prose)
             Spacer()
         }
