@@ -23,7 +23,7 @@ struct PresenceStageView: View {
                     header
                     if wide {
                         HStack(alignment: .top, spacing: 34) {
-                            presence(side: min(geometry.size.width - 430, 690))
+                            presence(side: max(260, min(geometry.size.width - 430, geometry.size.height - 360, 610)))
                                 .frame(maxWidth: .infinity)
                             PresenceWorkspace().frame(width: 320).padding(.top, 18)
                         }

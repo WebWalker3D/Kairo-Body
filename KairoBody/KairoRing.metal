@@ -216,8 +216,8 @@ fragment float4 kairoRingFragment(
         // Dark clock stage: the ring rests; the timekeeping is drawn elsewhere.
         colour *= 0.14;
     }
-    colour += mix(u.mood.rgb, u.accent.rgb, contour) * (silk + corona) * intensity;
-    colour += u.mood.rgb * atmosphere * 0.07 * intensity;
+    colour += mix(u.mood.rgb, u.accent.rgb, contour) * (silk * 2.5 + corona * 1.6) * intensity;
+    colour += u.mood.rgb * atmosphere * 0.12 * intensity;
     colour += u.accent.rgb * innerEdge * 0.035 * intensity;
     colour *= fade;
     colour = 1.0 - exp(-colour * 1.25);

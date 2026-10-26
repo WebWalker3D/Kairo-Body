@@ -33,7 +33,7 @@ struct RestStatusCard: View {
         case .awake: return "sun.horizon"
         case .sleeping: return "moon"
         case .dreaming: return "moon.stars"
-        case nil: return "moon.dotted"
+        case nil: return "moon"
         }
     }
 }

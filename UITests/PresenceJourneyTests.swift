@@ -21,11 +21,19 @@ final class PresenceJourneyTests: XCTestCase {
         app.buttons["Settings"].tap()
         let transcriptSwitch = app.switches["Show the shared conversation"]
         XCTAssertTrue(transcriptSwitch.waitForExistence(timeout: 5))
-        if transcriptSwitch.value as? String == "1" { transcriptSwitch.tap() }
+        if transcriptSwitch.value as? String == "1" {
+            transcriptSwitch.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        }
+        XCTAssertEqual(transcriptSwitch.value as? String, "0")
         app.buttons["Presence"].tap()
-        XCTAssertTrue(app.staticTexts["Shared conversation hidden"].waitForExistence(timeout: 5))
+        XCUIDevice.shared.orientation = .landscapeLeft
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "sharedConversationHidden").firstMatch.waitForExistence(timeout: 5))
+        capture("Presence-private-preview")
         app.buttons["Settings"].tap()
-        if transcriptSwitch.value as? String == "0" { transcriptSwitch.tap() }
+        if transcriptSwitch.value as? String == "0" {
+            transcriptSwitch.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        }
+        XCTAssertEqual(transcriptSwitch.value as? String, "1")
     }
 
     @MainActor

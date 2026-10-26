@@ -154,6 +154,10 @@ final class AppModel: ObservableObject {
         echo.follow(token: AppConfig.agentToken, foreground: isForeground && settings.followEcho)
         voice.configure(enabled: settings.voiceWakeEnabled, foreground: isForeground,
                         conversationBusy: conversation.isSending)
+        updateInvitations()
+    }
+
+    private func updateInvitations() {
         if settings.invitationsEnabled && pairing.isPaired {
             invitationTask?.cancel()
             invitationTask = Task { [weak self] in
@@ -322,7 +326,7 @@ final class AppModel: ObservableObject {
         presentation.start(paired: pairing.isPaired, foreground: isForeground)
         feed.followAllSurfaces(foreground: isForeground)
         systems.start(paired: pairing.isPaired, foreground: isForeground)
-        settingsChanged()
+        updateInvitations()
         if !pairing.isPaired { surfaceDelivery.stop(); privateRoom.stop(); clearStageDisplay() }
     }
 

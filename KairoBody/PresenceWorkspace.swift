@@ -28,6 +28,8 @@ struct PresenceWorkspace: View {
                     Text("Change this in Settings when you want it on this surface.")
                         .font(.caption).foregroundStyle(KairoTheme.faint)
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("sharedConversationHidden")
             }
             connections
             RestStatusCard()
