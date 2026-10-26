@@ -40,6 +40,7 @@ final class AppModel: ObservableObject {
     private var invitationTask: Task<Void, Never>?
     private var contactCounter = 0
     private var kairoProcessingCache: (value: Bool, at: Date)?
+    private var nextProcessingReadAt = Date.distantPast
 
     enum Destination: String, CaseIterable, Identifiable {
         case stage = "Stage"
@@ -270,7 +271,10 @@ final class AppModel: ObservableObject {
     }
 
     func refreshProcessing() async {
-        if let cache = kairoProcessingCache, Date().timeIntervalSince(cache.at) < 8 { return }
+        guard Date() >= nextProcessingReadAt else { return }
+        // Failed reads remain unknown without turning the one-second render
+        // loop into an aggressive network retry loop.
+        nextProcessingReadAt = Date().addingTimeInterval(8)
         if let value = await conversation.isKairoProcessing() {
             kairoProcessingCache = (value, Date())
         } else if let cache = kairoProcessingCache, Date().timeIntervalSince(cache.at) > 30 {
