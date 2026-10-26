@@ -7,6 +7,26 @@ import XCTest
 /// the Dot body was more expressive than the iPad - and these tests are the
 /// reason that cannot quietly happen again.
 final class RingChoreographyTests: XCTestCase {
+    func testGPUUniformsContainInlineEmitterValues() {
+        // Metal reads seven float4 headers then twelve float4 emitters.
+        // A Swift Array stores a reference, not its elements, in the struct.
+        XCTAssertEqual(MemoryLayout<KairoRingUniformsStorage>.stride, 19 * 16)
+        var uniforms = KairoRingUniformsStorage()
+        var state = RingRenderState()
+        state.emitterLevels = (0..<12).map { Float($0) / 12 }
+        uniforms.apply(state, viewport: CGSize(width: 600, height: 600))
+        withUnsafeBytes(of: uniforms) { bytes in
+            guard bytes.count >= 19 * 16 else {
+                XCTFail("GPU emitter data is missing from the uniform block")
+                return
+            }
+            for index in 0..<12 {
+                XCTAssertEqual(bytes.load(fromByteOffset: (7 + index) * 16, as: Float.self),
+                               Float(index) / 12, accuracy: 0.0001)
+            }
+        }
+    }
+
     func testEveryPhaseBecomesAVerbTheRendererCanAnimate() {
         XCTAssertEqual(RingMirror.activity(for: .speaking), .speaking)
         XCTAssertEqual(RingMirror.activity(for: .thinking), .thinking)
