@@ -45,6 +45,14 @@ final class ConversationClient: ObservableObject {
         case textOnly = "Text here"
         case speak = "Speak here"
         var id: String { rawValue }
+        var surfaceTarget: String {
+            switch self {
+            case .automatic: return "kairo"
+            case .silent: return "silent"
+            case .textOnly: return "ipad_display"
+            case .speak: return "ipad_speech"
+            }
+        }
     }
 
     enum PendingRecovery: Equatable {
@@ -58,6 +66,7 @@ final class ConversationClient: ObservableObject {
     @Published private(set) var isSending = false
     @Published private(set) var promptProgress: PromptTokenProgress?
     @Published private(set) var pendingRecovery: PendingRecovery?
+    @Published var draft = ""
     @Published var outputDestination: OutputDestination = .automatic
 
     /// The composition root wires these to the surface-delivery client so a
@@ -121,6 +130,7 @@ final class ConversationClient: ObservableObject {
         stopRequested = false
         let current = generation
         responseTask?.cancel()
+        let destination = outputDestination.surfaceTarget
         responseTask = Task { [weak self] in
             guard let self else { return }
             do {
@@ -128,14 +138,7 @@ final class ConversationClient: ObservableObject {
                 if let attachmentSessionID { sessionID = attachmentSessionID }
                 else { sessionID = try await self.conversationSessionID(generation: current) }
                 guard current == self.generation else { throw CancellationError() }
-                let destination: String?
-                switch self.outputDestination {
-                case .automatic: destination = "kairo"
-                case .silent: destination = "silent"
-                case .textOnly: destination = nil
-                case .speak: destination = "ipad_speech"
-                }
-                if let destination, destination != "silent" {
+                if destination != "silent" {
                     try await self.prepareOutput?(destination)
                     guard current == self.generation else { throw CancellationError() }
                 }

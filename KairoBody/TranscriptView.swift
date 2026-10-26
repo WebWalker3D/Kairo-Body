@@ -5,8 +5,6 @@ import SwiftUI
 /// writes into the same conversation Kairo is holding with the Dot.
 struct TranscriptView: View {
     @EnvironmentObject private var model: AppModel
-    @State private var draft = ""
-    @State private var destination = ConversationClient.OutputDestination.automatic
     @FocusState private var composerFocused: Bool
 
     var body: some View {
@@ -127,7 +125,7 @@ struct TranscriptView: View {
                 }
             }
             HStack(spacing: 10) {
-                Picker("Output", selection: $destination) {
+                Picker("Output", selection: Binding(get: { model.conversation.outputDestination }, set: { model.conversation.outputDestination = $0 })) {
                     ForEach(ConversationClient.OutputDestination.allCases) { option in
                         Text(option.rawValue).tag(option)
                     }
@@ -135,22 +133,21 @@ struct TranscriptView: View {
                 .pickerStyle(.menu)
                 .tint(KairoTheme.chrome)
                 .frame(width: 130)
-                .onChange(of: destination) { _, value in
-                    model.conversation.outputDestination = value
-                }
+                .accessibilityLabel("Output: \(model.conversation.outputDestination.rawValue)")
                 TextField(model.settings.followEcho
                           ? "Continue with Kairo…"
                           : "Say something to Kairo",
-                          text: $draft, axis: .vertical)
+                          text: Binding(get: { model.conversation.draft }, set: { model.conversation.draft = $0 }), axis: .vertical)
                     .focused($composerFocused)
+                    .accessibilityIdentifier("conversationComposer")
                     .lineLimit(1...5)
                     .padding(.horizontal, 14).padding(.vertical, 10)
                     .background(RoundedRectangle(cornerRadius: 14).fill(KairoTheme.plane))
                     .overlay(RoundedRectangle(cornerRadius: 14).stroke(KairoTheme.hairline))
                     .foregroundStyle(KairoTheme.prose)
                 Button {
-                    let text = draft
-                    draft = ""
+                    let text = model.conversation.draft
+                    model.conversation.draft = ""
                     composerFocused = false
                     Task { await model.conversation.send(text) }
                 } label: {
@@ -158,9 +155,9 @@ struct TranscriptView: View {
                         .font(.system(size: 28))
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(draft.trimmingCharacters(in: .whitespaces).isEmpty
+                .foregroundStyle(model.conversation.draft.trimmingCharacters(in: .whitespaces).isEmpty
                                  ? KairoTheme.faint : KairoTheme.primary)
-                .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty || model.conversation.isSending)
+                .disabled(model.conversation.draft.trimmingCharacters(in: .whitespaces).isEmpty || model.conversation.draft.trimmingCharacters(in: .whitespacesAndNewlines).count > 16_000 || model.conversation.isSending)
             }
         }
         .padding(.horizontal, 18)

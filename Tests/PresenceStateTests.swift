@@ -54,3 +54,18 @@ extension PresenceStateTests {
         XCTAssertNil(SystemCapability(object: malformed))
     }
 }
+
+final class ExplicitTextSurfaceTests: XCTestCase {
+    func testTextHerePersistsDisplayTargetAndUsesClaimedDeliveryPolicy() throws {
+        let target = ConversationClient.OutputDestination.textOnly.surfaceTarget
+        let turn = PendingTurn.new(sessionID: "test-session", text: "Show this here",
+                                   attachmentIDs: [], outputDestination: target)
+        XCTAssertEqual(turn.outputDestination, "ipad_display")
+        let completed: [String: Any] = ["settled_status": "completed", "settled_text": "An answer"]
+        XCTAssertEqual(SurfaceOutputPolicy.target(job: completed, requested: turn.outputDestination), "ipad_display")
+        // A server-selected remote surface still wins; do not duplicate output.
+        let remote: [String: Any] = ["settled_status": "completed", "metadata_json": ["surface_output_target": "dot"]]
+        XCTAssertNil(SurfaceOutputPolicy.target(job: remote, requested: turn.outputDestination))
+        XCTAssertNil(SurfaceOutputPolicy.target(job: completed, requested: ConversationClient.OutputDestination.silent.surfaceTarget))
+    }
+}

@@ -11,7 +11,6 @@ struct PresenceStageView: View {
     @State private var contactPoint: CGPoint?
     @State private var contactCounter = 0
     @State private var systemsOpen = false
-    @State private var draft = ""
     @FocusState private var composerFocused: Bool
 
     var body: some View {
@@ -146,7 +145,7 @@ struct PresenceStageView: View {
                 Image(systemName: "bubble.left.and.bubble.right")
                     .font(.system(size: 19, weight: .light)).frame(width: 36, height: 44)
             }.accessibilityLabel("Open conversation")
-            TextField("Talk to Kairo…", text: $draft, axis: .vertical)
+            TextField("Talk to Kairo…", text: Binding(get: { model.conversation.draft }, set: { model.conversation.draft = $0 }), axis: .vertical)
                 .font(.system(size: 16)).foregroundStyle(KairoTheme.prose)
                 .focused($composerFocused).lineLimit(1...4)
                 .accessibilityIdentifier("stageComposer")
@@ -159,8 +158,8 @@ struct PresenceStageView: View {
                 Image(systemName: "slider.horizontal.3").frame(width: 32, height: 44)
             }.accessibilityLabel("Output: \(model.conversation.outputDestination.rawValue)")
             Button {
-                let text = draft
-                draft = ""
+                let text = model.conversation.draft
+                model.conversation.draft = ""
                 composerFocused = false
                 model.body.noteUserActivity()
                 Task { await model.conversation.send(text) }
@@ -180,7 +179,7 @@ struct PresenceStageView: View {
     }
 
     private var canSend: Bool {
-        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !model.conversation.isSending
+        !model.conversation.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && model.conversation.draft.trimmingCharacters(in: .whitespacesAndNewlines).count <= 16_000 && !model.conversation.isSending
     }
 
     private var bodyHeadline: String {

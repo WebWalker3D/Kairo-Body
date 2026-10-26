@@ -23,7 +23,12 @@ final class PresenceJourneyTests: XCTestCase {
         XCTAssertTrue(app.buttons["Close systems"].waitForExistence(timeout: 5))
         capture("Presence-systems")
         app.buttons["Close systems"].tap()
+        app.buttons["Output: Kairo decides"].tap()
+        app.buttons["Speak here"].tap()
         app.buttons["Conversation"].tap()
+        let continuedDraft = app.descendants(matching: .any).matching(identifier: "conversationComposer").firstMatch
+        XCTAssertEqual(continuedDraft.value as? String, "A draft stays on this body")
+        XCTAssertTrue(app.buttons["Output: Speak here"].exists)
         XCTAssertTrue(app.staticTexts["Conversations"].waitForExistence(timeout: 5))
         capture("Conversation-portrait")
         app.buttons["Private"].tap()
