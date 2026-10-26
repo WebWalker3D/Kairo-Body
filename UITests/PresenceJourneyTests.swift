@@ -9,6 +9,8 @@ final class PresenceJourneyTests: XCTestCase {
         XCTAssertTrue(app.buttons["Presence"].waitForExistence(timeout: 10))
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue(app.staticTexts["K A I R O"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Open systems"].exists)
+        XCTAssertTrue(app.textFields["Talk to Kairo…"].exists)
         capture("Presence-landscape")
         XCUIDevice.shared.orientation = .portrait
         capture("Presence-portrait")
@@ -27,8 +29,10 @@ final class PresenceJourneyTests: XCTestCase {
         XCTAssertEqual(transcriptSwitch.value as? String, "0")
         app.buttons["Presence"].tap()
         XCUIDevice.shared.orientation = .landscapeLeft
+        app.buttons["Open systems"].tap()
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "sharedConversationHidden").firstMatch.waitForExistence(timeout: 5))
         capture("Presence-private-preview")
+        app.buttons["Close systems"].tap()
         app.buttons["Settings"].tap()
         if transcriptSwitch.value as? String == "0" {
             transcriptSwitch.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
