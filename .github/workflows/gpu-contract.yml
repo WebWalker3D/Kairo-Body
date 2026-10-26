@@ -1,0 +1,28 @@
+name: GPU contract qualification
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: macos-15
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - run: xcodegen generate
+      - name: Isolated GPU byte-layout regression
+        run: |
+          set -o pipefail
+          simulator_id=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; print(next(d["udid"] for group in json.load(sys.stdin)["devices"].values() for d in group if d["name"].startswith("iPad")))')
+          xcrun simctl boot "$simulator_id"
+          xcrun simctl bootstatus "$simulator_id" -b
+          xcodebuild test -project KairoBody.xcodeproj -scheme KairoBody \
+            -destination "platform=iOS Simulator,id=$simulator_id" -destination-timeout 90 \
+            -parallel-testing-enabled NO -only-testing:KairoBodyTests/RingChoreographyTests \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee gpu-contract.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gpu-contract-log
+          path: gpu-contract.log
