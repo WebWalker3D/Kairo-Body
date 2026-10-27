@@ -101,6 +101,7 @@ jobs:
           kill -INT "$recording_pid"
           wait "$recording_pid" || true
           xcrun simctl terminate "$simulator_id" icu.kairo.body
+          xcrun swift scripts/compress_preview.swift KairoBody-motion.mp4 KairoBody-motion-preview.mp4
       - name: Upload visual smoke screenshots
         uses: actions/upload-artifact@v4
         with:
@@ -108,7 +109,7 @@ jobs:
           path: |
             KairoBody-setup.png
             KairoBody-stage.png
-            KairoBody-motion.mp4
+            KairoBody-motion-preview.mp4
           if-no-files-found: error
       - name: Build unsigned device app
         run: |
