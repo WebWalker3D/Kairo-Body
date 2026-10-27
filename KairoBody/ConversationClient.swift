@@ -79,17 +79,19 @@ final class ConversationClient: ObservableObject {
     private let speech: SpeechService
     private let http: KairoHTTP
     private let tracker: JobTracker
-    private let pendingStore = PendingTurnStore()
+    private let pendingStore: PendingTurnStore
     private var generation = 0
     private var stopRequested = false
     private var lastJobID = ""
     private var responseTask: Task<Void, Never>?
 
-    init(settings: AppSettings, speech: SpeechService, http: KairoHTTP = KairoHTTP()) {
+    init(settings: AppSettings, speech: SpeechService, http: KairoHTTP = KairoHTTP(),
+         tracker: JobTracker? = nil, pendingStore: PendingTurnStore = PendingTurnStore()) {
         self.settings = settings
         self.speech = speech
         self.http = http
-        self.tracker = JobTracker(request: { path, method, body in
+        self.pendingStore = pendingStore
+        self.tracker = tracker ?? JobTracker(request: { path, method, body in
             try await http.agent(path, method: method, body: body)
         })
     }

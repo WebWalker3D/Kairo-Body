@@ -1,0 +1,21 @@
+Kairo Body reliability overhaul — 2026-10-26
+
+Intent: a question gets immediate acknowledgement, honest live progress, a visible
+completion or actionable failure, and durable safe recovery. Preserve public app
+identity, credentials, owner privacy, Kairo's output routing and receipt semantics.
+Keep the Metal stage but make its response lifecycle usable. No claim of zero bugs.
+
+1. Audit complete source surfaces in independent code reviews; record findings.
+2. Reproduce feed loop stoppage, submission/recovery/cancellation races, hidden
+   progress, private-room stale completions, voice rearming and credential failures.
+   Use real clients and deterministic network/storage boundaries; no live messages.
+3. Repair tested defects. Main stage and transcript share request status, elapsed
+   time, honest phase and retry/check controls. No fabricated partial answer or
+   progress percentage. Preserve final answer visibility via authorized surface.
+4. Verify full simulator XCTest/UI journeys and unsigned device package on Actions;
+   inspect actual screenshots. Version in-place update. Review whole changeset.
+5. Deliver qualified IPA with assessment and explicit real-iPad acceptance limits.
+
+Review focus: foreground/background races; unpair while responses are in flight;
+unknown submission outcome and exact idempotency retry; output busy/receipt loss;
+voice playback vs recording; large/invalid input; image replacement; credentials.

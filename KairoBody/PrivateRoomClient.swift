@@ -42,12 +42,27 @@ final class PrivateRoomClient: ObservableObject {
     @Published private(set) var memoryProposal: MemoryProposal?
     @Published private(set) var decidingMemory = false
     private var currentJobID: String?
-    private let http: KairoHTTP
+    typealias Request = (String, String, [String: Any]?, TimeInterval) async throws -> [String: Any]
+    private let request: Request
+    private let ownerProof: () -> String
+    private let hasAgentToken: () -> Bool
     private var generation = UUID()
 
-    init(http: KairoHTTP = KairoHTTP()) { self.http = http }
+    init(http: KairoHTTP = KairoHTTP(),
+         ownerProof: @escaping () -> String = { AppConfig.ownerProof },
+         hasAgentToken: @escaping () -> Bool = { !AppConfig.agentToken.isEmpty },
+         request: Request? = nil) {
+        self.ownerProof = ownerProof
+        self.hasAgentToken = hasAgentToken
+        self.request = request ?? { path, method, body, timeout in
+            try await http.agentObject(path, method: method, body: body, timeout: timeout)
+        }
+    }
 
-    var isPaired: Bool { PairingClient.validCredential(AppConfig.ownerProof) }
+    func resumePending() async {}
+    func pause() { stop() }
+
+    var isPaired: Bool { PairingClient.validCredential(ownerProof()) }
 
     func stop() {
         generation = UUID(); busy = false
@@ -55,10 +70,9 @@ final class PrivateRoomClient: ObservableObject {
     }
 
     func openSession() async throws -> String {
-        guard !AppConfig.agentToken.isEmpty, isPaired else { throw PrivateBodyError.unpaired }
+        guard hasAgentToken(), isPaired else { throw PrivateBodyError.unpaired }
         let run = generation
-        let opened = try await http.agentObject("api/ipad/private/session", method: "POST",
-            body: [:], timeout: 15)
+        let opened = try await request("api/ipad/private/session", "POST", [:], 15)
         guard generation == run, let id = opened["id"] as? String, !id.isEmpty,
               id != EchoBinding.configuredSessionID,
               (opened["metadata_json"] as? [String: Any])?["client"] as? String == "ipad_private" else {
@@ -78,18 +92,17 @@ final class PrivateRoomClient: ObservableObject {
             let id: String
             if let current = privateSessionID { id = current } else { id = try await openSession() }
             guard generation == run else { return }
-            let job = try await http.agentObject("api/sessions/\(id)/jobs", method: "POST",
-                body: ["prompt": trimmed,
+            let job = try await request("api/sessions/\(id)/jobs", "POST", ["prompt": trimmed,
                        "idempotency_key": "ipad-private:\(UUID().uuidString.lowercased())",
-                       "metadata": ["client": "ipad_private", "source": "ipad_private"]])
+                       "metadata": ["client": "ipad_private", "source": "ipad_private"]], 20)
             guard let jobID = job["id"] as? String else { throw PrivateBodyError.invalidResponse }
             currentJobID = jobID
             for _ in 0..<600 {
                 try Task.checkCancellation()
                 guard generation == run else { return }
-                let current = try await http.agentObject("api/jobs/\(jobID)?compact=1", timeout: 15)
+                let current = try await request("api/jobs/\(jobID)?compact=1", "GET", nil, 15)
                 if current["status"] as? String == "waiting_permission" {
-                    let pending = try await http.agentObject("api/jobs/\(jobID)/ipad-memory", timeout: 15)
+                    let pending = try await request("api/jobs/\(jobID)/ipad-memory", "GET", nil, 15)
                     guard generation == run else { return }
                     memoryProposal = (pending["proposals"] as? [[String: Any]])?.compactMap(MemoryProposal.init(json:)).first
                 }
@@ -112,8 +125,7 @@ final class PrivateRoomClient: ObservableObject {
         decidingMemory = true
         defer { if generation == run { decidingMemory = false } }
         do {
-            let result = try await http.agentObject("api/jobs/\(jobID)/ipad-memory", method: "POST",
-                body: ["approval_id": proposal.id, "proposal_hash": proposal.hash, "decision": decision])
+            let result = try await request("api/jobs/\(jobID)/ipad-memory", "POST", ["approval_id": proposal.id, "proposal_hash": proposal.hash, "decision": decision], 20)
             guard generation == run else { return }
             guard result["accepted"] as? Bool == true else { throw PrivateBodyError.invalidResponse }
             memoryProposal = nil

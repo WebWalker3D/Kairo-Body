@@ -16,6 +16,7 @@ final class SharedVisualContext: ObservableObject {
     @Published private(set) var sessionID: String?
     @Published var previewJPEG: Data?
     @Published private(set) var error: String?
+    @Published private(set) var discussionReply = ""
     private(set) var generation = UUID()
 
     @discardableResult
@@ -43,6 +44,9 @@ final class SharedVisualContext: ObservableObject {
         previewJPEG = nil; error = nil
     }
     func fail(_ reason: String) { error = reason }
+    func recordReply(_ reply: String, selection: UUID) {
+        discussionReply = reply
+    }
     func attachmentIDs(for sessionID: String) -> [String] {
         guard self.sessionID == sessionID, let attachmentID else { return [] }
         return [attachmentID]

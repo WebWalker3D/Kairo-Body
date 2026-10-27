@@ -28,8 +28,28 @@ final class PairingClient: ObservableObject {
     /// result from the old attempt can never overwrite the current state.
     private var pairingGeneration = 0
 
-    init() {
-        state = Self.savedState()
+    private let defaults: UserDefaults
+    private let sensoryAvailable: () -> Bool
+    private let saveProof: (String) throws -> Void
+    private let clearProof: () throws -> Void
+    private let request: (String) async throws -> [String: Any]
+
+    init(defaults: UserDefaults = .standard,
+         readProof: () -> String = { AppConfig.ownerProof },
+         sensoryAvailable: @escaping () -> Bool = { !AppConfig.sensoryToken.isEmpty },
+         saveProof: @escaping (String) throws -> Void = { try AppConfig.saveOwnerProof($0) },
+         clearProof: @escaping () throws -> Void = { try AppConfig.clearOwnerProof() },
+         request: @escaping (String) async throws -> [String: Any] = { challenge in
+             try await KairoHTTP().sensory(url: URL(string: AppConfig.bodyPairingRedeemURL)!,
+                                           body: ["challenge": challenge])
+         }) {
+        self.defaults = defaults
+        self.sensoryAvailable = sensoryAvailable
+        self.saveProof = saveProof
+        self.clearProof = clearProof
+        self.request = request
+        state = Self.validCredential(readProof())
+            ? .paired(endpointID: defaults.string(forKey: "pairedEndpointID") ?? "this iPad") : .unpaired
     }
 
     static func savedState() -> State {
@@ -61,7 +81,7 @@ final class PairingClient: ObservableObject {
         guard let challenge = Self.normalizedChallenge(challenge) else {
             state = .failed("Enter the six-digit code from Kairo's pairing request."); return
         }
-        guard !AppConfig.sensoryToken.isEmpty else {
+        guard sensoryAvailable() else {
             state = .failed("This copy of Kairo has no body credential."); return
         }
         redeemTask?.cancel()
@@ -70,16 +90,15 @@ final class PairingClient: ObservableObject {
         let attempt = pairingGeneration
         redeemTask = Task { [weak self] in
             do {
-                let http = KairoHTTP()
-                let data = try await http.sensory(url: URL(string: AppConfig.bodyPairingRedeemURL)!,
-                                                  body: ["challenge": challenge])
+                guard let self else { return }
+                let data = try await self.request(challenge)
                 guard let credential = data["credential"] as? String, Self.validCredential(credential),
                       let endpoint = data["endpoint_id"] as? String, !endpoint.isEmpty else {
                     throw MalformedResponse()
                 }
-                try AppConfig.saveOwnerProof(credential)
-                guard let self, attempt == self.pairingGeneration, !Task.isCancelled else { return }
-                UserDefaults.standard.set(endpoint, forKey: "pairedEndpointID")
+                try self.saveProof(credential)
+                guard attempt == self.pairingGeneration, !Task.isCancelled else { return }
+                self.defaults.set(endpoint, forKey: "pairedEndpointID")
                 self.state = .paired(endpointID: endpoint)
             } catch {
                 // A replaced or forgotten attempt must never land a stale state.
@@ -100,8 +119,8 @@ final class PairingClient: ObservableObject {
     func forgetLocalProof() {
         redeemTask?.cancel()
         pairingGeneration += 1
-        do { try AppConfig.clearOwnerProof() } catch {}
-        UserDefaults.standard.removeObject(forKey: "pairedEndpointID")
+        do { try clearProof() } catch {}
+        defaults.removeObject(forKey: "pairedEndpointID")
         state = .unpaired
     }
 }

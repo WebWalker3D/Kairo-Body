@@ -20,7 +20,13 @@ final class TranscriptFeedClient: ObservableObject {
     @Published private(set) var lastAnsweredAt: Date?
     var processing: Bool { following && turns.contains(where: \.active) }
 
-    private let http: KairoHTTP
+    typealias ConditionalRead = @MainActor (String, String?) async throws
+        -> (response: ObserverResponse, object: [String: Any]?, validator: String?)
+
+    private let read: ConditionalRead
+    private let ownerProof: @MainActor () -> String
+    private let agentAvailable: @MainActor () -> Bool
+    private let sleep: @MainActor (Double) async throws -> Void
     private var pollTask: Task<Void, Never>?
     private var observerCredential = ""
     private var observerValidator: String?
@@ -30,17 +36,35 @@ final class TranscriptFeedClient: ObservableObject {
     private var refreshing = false
     private var lastSettledCreatedAt: String?
 
-    init(http: KairoHTTP = KairoHTTP()) { self.http = http }
+    convenience init(http: KairoHTTP = KairoHTTP()) {
+        self.init(ownerProof: { AppConfig.ownerProof },
+                  agentAvailable: { !AppConfig.agentToken.isEmpty },
+                  read: { path, validator in
+                      try await http.agentConditional(path, validator: validator)
+                  })
+    }
+
+    init(ownerProof: @escaping @MainActor () -> String,
+         agentAvailable: @escaping @MainActor () -> Bool,
+         read: @escaping ConditionalRead,
+         sleep: @escaping @MainActor (Double) async throws -> Void = { seconds in
+             try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+         }) {
+        self.ownerProof = ownerProof
+        self.agentAvailable = agentAvailable
+        self.read = read
+        self.sleep = sleep
+    }
 
     func followAllSurfaces(foreground: Bool) {
         // Already following this owner in the foreground: keep the running
         // loop. Restarting would discard the read in flight.
         if foreground, following, pollTask != nil,
-           observerCredential == AppConfig.ownerProof { return }
+           observerCredential == ownerProof() { return }
         stop()
         self.foreground = foreground
-        guard !AppConfig.agentToken.isEmpty,
-              PairingClient.validCredential(AppConfig.ownerProof) else { clearObserver(); return }
+        guard agentAvailable(),
+              PairingClient.validCredential(ownerProof()) else { clearObserver(); return }
         // Leaving the foreground pauses reads but keeps the transcript and its
         // scroll position; only missing or refused authority clears it.
         guard foreground else { return }
@@ -55,7 +79,7 @@ final class TranscriptFeedClient: ObservableObject {
                 let delay = outcome == nil ? 1 : ObserverPollSchedule.interval(
                     turnRunning: self.turns.contains(where: \.active),
                     consecutiveFailures: self.consecutiveFailures)
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                try? await self.sleep(delay)
             }
         }
     }
@@ -92,7 +116,7 @@ final class TranscriptFeedClient: ObservableObject {
     /// confirmed 401/403 or a different owner proof clears it.
     @discardableResult
     func refresh() async -> ObserverResponse? {
-        let credential = AppConfig.ownerProof
+        let credential = ownerProof()
         guard foreground, !refreshing else { return nil }
         guard PairingClient.validCredential(credential) else { clearObserver(); return .authorizationLost }
         if observerCredential != credential {
@@ -106,9 +130,9 @@ final class TranscriptFeedClient: ObservableObject {
         defer { refreshing = false }
         let validator = observerValidator
         do {
-            let (outcome, snapshot, etag) = try await http.agentConditional(
-                "api/ipad/conversations?tail=20", validator: validator)
-            guard current == generation, foreground, AppConfig.ownerProof == credential,
+            let (outcome, snapshot, etag) = try await read(
+                "api/ipad/conversations?tail=20", validator)
+            guard current == generation, foreground, ownerProof() == credential,
                   !Task.isCancelled else { return nil }
             switch outcome {
             case .notModified:
@@ -138,7 +162,7 @@ final class TranscriptFeedClient: ObservableObject {
             lastUpdatedAt = Date()
             return outcome
         } catch {
-            guard current == generation, foreground, AppConfig.ownerProof == credential,
+            guard current == generation, foreground, ownerProof() == credential,
                   !Task.isCancelled else { return nil }
             consecutiveFailures += 1
             let cause = Self.troubleCause(error)

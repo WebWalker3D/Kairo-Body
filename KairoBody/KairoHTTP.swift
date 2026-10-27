@@ -19,10 +19,13 @@ enum Credential {
 final class KairoHTTP {
     private let session: URLSession
     private let responseLimit: Int
+    private let credentials: () -> (agent: String, owner: String)
 
-    init(session: URLSession = TransportConfig.sharedSession, responseLimit: Int = 4 * 1024 * 1024) {
+    init(session: URLSession = TransportConfig.sharedSession, responseLimit: Int = 4 * 1024 * 1024,
+         credentials: @escaping () -> (agent: String, owner: String) = { (AppConfig.agentToken, AppConfig.ownerProof) }) {
         self.session = session
         self.responseLimit = responseLimit
+        self.credentials = credentials
     }
 
     /// GET/POST an Agent Platform path (`api/...`). Throws HTTPStatusError or
@@ -55,10 +58,10 @@ final class KairoHTTP {
               let url = Self.endpoint(base, path: path) else { throw HTTPStatusError(status: 0) }
         var request = URLRequest(url: url)
         request.timeoutInterval = 12
-        let token = AppConfig.agentToken
+        let token = credentials().agent
         guard !token.isEmpty else { throw HTTPStatusError(status: 401) }
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        let proof = AppConfig.ownerProof
+        let proof = credentials().owner
         if !proof.isEmpty { request.setValue(proof, forHTTPHeaderField: "X-Kairo-Device") }
         if let validator, !validator.isEmpty { request.setValue(validator, forHTTPHeaderField: "If-None-Match") }
         let (data, response) = try await session.data(for: request)
@@ -112,7 +115,7 @@ final class KairoHTTP {
               let url = Self.endpoint(base, path: path) else { throw HTTPStatusError(status: 0) }
         var request = URLRequest(url: url)
         request.httpMethod = method
-        let token = AppConfig.agentToken
+        let token = credentials().agent
         guard !token.isEmpty else { throw HTTPStatusError(status: 401) }
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         if let accept { request.setValue(accept, forHTTPHeaderField: "Accept") }
@@ -138,12 +141,12 @@ final class KairoHTTP {
         request.httpMethod = method
         switch credential {
         case .agent:
-            let token = AppConfig.agentToken
+            let token = credentials().agent
             guard !token.isEmpty else { throw HTTPStatusError(status: 401) }
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             // Owner-scoped routes read this header as the pairing proof; the
             // Agent bearer alone gets a different (public) scope.
-            let owner = AppConfig.ownerProof
+            let owner = credentials().owner
             if !owner.isEmpty { request.setValue(owner, forHTTPHeaderField: "X-Kairo-Device") }
         case .sensory:
             let token = AppConfig.sensoryToken

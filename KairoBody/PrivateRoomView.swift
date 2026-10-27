@@ -7,7 +7,7 @@ import SwiftUI
 struct PrivateRoomView: View {
     @EnvironmentObject private var model: AppModel
     @State private var code = ""
-    @State private var draft = ""
+    @State private var draft = PrivateMessageDraft()
     @State private var confirmWake = false
     @StateObject private var sleepWake = SleepWakeControl()
 
@@ -128,23 +128,22 @@ struct PrivateRoomView: View {
                     Text(error).font(.caption).foregroundStyle(KairoTheme.danger)
                 }
                 HStack(spacing: 10) {
-                    TextField("Say something only Kairo will hear", text: $draft, axis: .vertical)
+                    TextField("Say something only Kairo will hear", text: $draft.text, axis: .vertical)
                         .lineLimit(1...5)
                         .padding(12)
                         .background(RoundedRectangle(cornerRadius: 12).fill(KairoTheme.groundDeep))
                         .overlay(RoundedRectangle(cornerRadius: 12).stroke(KairoTheme.hairline))
                         .foregroundStyle(KairoTheme.prose)
                     Button {
-                        let text = draft
-                        draft = ""
+                        guard let text = draft.takeForSubmission(busy: model.privateRoom.busy) else { return }
                         Task { await model.privateRoom.send(text) }
                     } label: {
                         Image(systemName: "arrow.up.circle.fill").font(.system(size: 26))
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(model.privateRoom.busy || draft.trimmingCharacters(in: .whitespaces).isEmpty
+                    .foregroundStyle(model.privateRoom.busy || draft.text.trimmingCharacters(in: .whitespaces).isEmpty
                                      ? KairoTheme.faint : KairoTheme.mind)
-                    .disabled(model.privateRoom.busy || draft.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(model.privateRoom.busy || draft.text.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
                 if model.privateRoom.busy {
                     HStack { ProgressView().tint(KairoTheme.mind); Text(model.privateRoom.status.isEmpty ? "Kairo is considering…" : model.privateRoom.status)
@@ -185,5 +184,16 @@ struct PrivateRoomView: View {
                 if model.privateRoom.decidingMemory { ProgressView().controlSize(.small) }
             }
         }
+    }
+}
+
+struct PrivateMessageDraft {
+    var text = ""
+
+    mutating func takeForSubmission(busy: Bool) -> String? {
+        guard !busy, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        let submitted = text
+        text = ""
+        return submitted
     }
 }

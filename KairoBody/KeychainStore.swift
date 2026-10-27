@@ -2,6 +2,15 @@ import Foundation
 import Security
 
 enum KeychainStore {
+    struct Operations {
+        var update: ([String: Any], [String: Any]) -> OSStatus
+        var add: ([String: Any]) -> OSStatus
+        var delete: ([String: Any]) -> OSStatus
+        static let system = Operations(
+            update: { SecItemUpdate($0 as CFDictionary, $1 as CFDictionary) },
+            add: { SecItemAdd($0 as CFDictionary, nil) },
+            delete: { SecItemDelete($0 as CFDictionary) })
+    }
     static func read(service: String, account: String) -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -24,33 +33,33 @@ enum KeychainStore {
         set(value, service: service, account: account)
     }
 
-    static func set(_ value: String, service: String, account: String) {
+    static func set(_ value: String, service: String, account: String, operations: Operations = .system) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
-        SecItemDelete(query as CFDictionary)
+        operations.delete(query)
         guard !value.isEmpty else { return }
         var add = query
         add[kSecValueData as String] = Data(value.utf8)
         add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-        SecItemAdd(add as CFDictionary, nil)
+        operations.add(add)
     }
 
-    static func setChecked(_ value: String, service: String, account: String) throws {
+    static func setChecked(_ value: String, service: String, account: String, operations: Operations = .system) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
         let update: [String: Any] = [kSecValueData as String: Data(value.utf8)]
-        var status = SecItemUpdate(query as CFDictionary, update as CFDictionary)
+        var status = operations.update(query, update)
         if status == errSecItemNotFound {
             var add = query
             add[kSecValueData as String] = Data(value.utf8)
             add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-            status = SecItemAdd(add as CFDictionary, nil)
+            status = operations.add(add)
         }
         guard status == errSecSuccess else { throw KeychainError.writeFailed }
     }
