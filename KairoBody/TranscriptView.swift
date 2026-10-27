@@ -76,14 +76,15 @@ struct TranscriptView: View {
         .background(KairoTheme.warn.opacity(0.08))
     }
 
+    private static let topID = "transcript-top"
+
     private var turnsList: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 20) {
-                    ForEach(model.feed.turns) { turn in
-                        TurnCard(turn: turn)
-                            .id(turn.id)
-                    }
+                    // Newest first: the latest exchange is where the screen opens,
+                    // not at the bottom of twenty long answers.
+                    Color.clear.frame(height: 0).id(Self.topID)
                     if !model.conversation.reply.isEmpty,
                        !model.feed.turns.contains(where: { $0.id == model.conversation.responseJobID }) {
                         PlaneCard {
@@ -91,6 +92,10 @@ struct TranscriptView: View {
                             Text(model.conversation.submittedText).font(.subheadline).foregroundStyle(KairoTheme.chrome)
                             Text(model.conversation.reply).textSelection(.enabled).foregroundStyle(KairoTheme.prose)
                         }
+                    }
+                    ForEach(model.feed.turns.reversed()) { turn in
+                        TurnCard(turn: turn)
+                            .id(turn.id)
                     }
                     if model.feed.turns.isEmpty && model.conversation.reply.isEmpty {
                         Text(model.feed.following
@@ -107,9 +112,8 @@ struct TranscriptView: View {
                 .padding(.top, 16)
                 .frame(maxWidth: .infinity)
             }
-            .onChange(of: model.feed.turns.count) { _, count in
-                if let last = model.feed.turns.last { withAnimation { proxy.scrollTo(last.id, anchor: .bottom) } }
-                _ = count
+            .onChange(of: model.feed.turns.last?.id) { _, _ in
+                withAnimation { proxy.scrollTo(Self.topID, anchor: .top) }
             }
         }
     }

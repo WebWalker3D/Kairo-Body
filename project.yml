@@ -20,7 +20,7 @@ targets:
       properties:
         CFBundleDisplayName: Kairo Body
         CFBundleShortVersionString: "3.3.0"
-        CFBundleVersion: "59"
+        CFBundleVersion: "60"
         # Public builds carry no personal provisioning. These keys stay empty
         # in the repository; credentials come from on-device setup and the
         # Echo endpoint id falls back to the constant in AppConfig.
@@ -47,7 +47,7 @@ targets:
         PRODUCT_NAME: KairoBody
         PRODUCT_MODULE_NAME: KairoBody
         MARKETING_VERSION: 3.3.0
-        CURRENT_PROJECT_VERSION: 59
+        CURRENT_PROJECT_VERSION: 60
         GENERATE_INFOPLIST_FILE: NO
         TARGETED_DEVICE_FAMILY: "2"
         SUPPORTS_MACCATALYST: NO
