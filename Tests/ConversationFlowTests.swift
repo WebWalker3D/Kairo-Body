@@ -147,16 +147,19 @@ extension ConversationFlowTests {
         defer { suite.removePersistentDomain(forName: suiteName); ConversationHTTPFixture.respond = nil }
         var reads = 0
         var eventReads = 0
-        ConversationHTTPFixture.respond = { request in
+        ConversationHTTPFixture.respond = { request -> (Int, Any) in
             if request.httpMethod == "POST" { return (200, ["id": "job_permission"]) }
             if request.url!.path.hasSuffix("/events") {
                 eventReads += 1
-                return (200, [["type": "PromptProgress", "processed": 123, "seq": 1]])
+                let events: [[String: Any]] = [["type": "PromptProgress", "processed": 123, "seq": 1]]
+                return (200, events)
             }
             reads += 1
-            return reads == 1
-                ? (200, ["status": "waiting_permission", "settled_status": NSNull()])
-                : (200, ["status": "completed", "settled_status": "completed", "settled_text": "After explicit approval"])
+            if reads == 1 {
+                let job: [String: Any] = ["status": "waiting_permission", "settled_status": NSNull()]
+                return (200, job)
+            }
+            return (200, ["status": "completed", "settled_status": "completed", "settled_text": "After explicit approval"])
         }
         let settings = AppSettings(defaults: suite)
         settings.followEcho = false; settings.sharedSessionID = "session_fixture"
