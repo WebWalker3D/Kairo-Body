@@ -1,5 +1,6 @@
 import MetalKit
 import XCTest
+import UIKit
 @testable import KairoBody
 
 final class ParticleRenderTests: XCTestCase {
@@ -72,5 +73,16 @@ final class ParticleRenderTests: XCTestCase {
             stride(from: 0, to: bytes.count, by: 4).reduce(0) { $0 + Int(bytes[$1+2]) }
         }
         XCTAssertLessThan(light(sleeping), light(still) / 3)
+        for (name, pixels) in [("Particle-field-still", still), ("Particle-field-motion", moved), ("Particle-field-touch", touched)] {
+            let provider = try XCTUnwrap(CGDataProvider(data: Data(pixels) as CFData))
+            let image = try XCTUnwrap(CGImage(width: size, height: size,
+                bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: size * 4,
+                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent))
+            let attachment = XCTAttachment(image: UIImage(cgImage: image))
+            attachment.name = name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
     }
 }

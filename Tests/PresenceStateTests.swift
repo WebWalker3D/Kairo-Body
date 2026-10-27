@@ -55,6 +55,7 @@ extension PresenceStateTests {
     }
 }
 
+@MainActor
 final class ExplicitTextSurfaceTests: XCTestCase {
     func testTextHerePersistsDisplayTargetAndUsesClaimedDeliveryPolicy() throws {
         let target = ConversationClient.OutputDestination.textOnly.surfaceTarget

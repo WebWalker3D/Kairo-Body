@@ -24,3 +24,20 @@ passes, Reduce Motion freezes motion. Real-device performance is not claimed.
 
 Ruling: use direct native implementation as already delegated; no new design
 approval gate. The prior visual direction is superseded, not its safety fixes.
+
+## Evidence and review
+
+- Baseline UI journey b75f008 failed as expected: missing Open systems and
+  stage composer controls. All 122 existing unit cases had zero failures
+  (one existing unsigned-Keychain fixture skip).
+- Fresh independent review of ae99cb1 found no GPU ABI or coordinate blocker.
+  It found split output selection between stage and transcript, plus Text here
+  not requesting a display. Fix pass binds both composers to shared state,
+  preserves drafts in memory across navigation, and maps explicit Text here
+  to ipad_display through the existing claim/receipt path. Destination is
+  captured at submission so changing the menu during a request cannot reroute it.
+- GPU qualification renders the real shader to a Metal texture, checks visible
+  coverage, time/touch response, fixed-time stability and sleep dimming.
+- Ruling: no server deployment or production inference needed; existing public
+  app surface protocol supports ipad_display. Physical iPad performance and
+  replacement-install acceptance remain hardware checks.
