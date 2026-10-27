@@ -62,9 +62,15 @@ final class ResponseSceneTests: XCTestCase {
             let cg = try XCTUnwrap(image.cgImage)
             let data = try XCTUnwrap(cg.dataProvider?.data) as Data
             let bytes = [UInt8](data)
-            let lit = stride(from: 0, to: bytes.count - 3, by: 4).filter {
-                Int(bytes[$0]) + Int(bytes[$0 + 1]) + Int(bytes[$0 + 2]) > 150
-            }.count
+            var lit = 0
+            var offset = 0
+            while offset + 2 < bytes.count {
+                let red = Int(bytes[offset])
+                let green = Int(bytes[offset + 1])
+                let blue = Int(bytes[offset + 2])
+                if red + green + blue > 150 { lit += 1 }
+                offset += 4
+            }
             XCTAssertGreaterThan(lit, 1000, "A blank scene is not visual evidence")
             let attachment = XCTAttachment(image: image)
             attachment.name = "Dot-response-\(phase)"; attachment.lifetime = .keepAlways; add(attachment)
