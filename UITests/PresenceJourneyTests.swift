@@ -28,7 +28,14 @@ final class PresenceJourneyTests: XCTestCase {
         app.buttons["Conversation"].tap()
         let continuedDraft = app.descendants(matching: .any).matching(identifier: "conversationComposer").firstMatch
         XCTAssertEqual(continuedDraft.value as? String, "A draft stays on this body")
-        XCTAssertTrue(app.buttons["Output: Speak here"].exists)
+        let output = app.descendants(matching: .any).matching(identifier: "conversationOutput").firstMatch
+        XCTAssertTrue(output.waitForExistence(timeout: 5))
+        XCTAssertTrue(output.label.contains("Speak here") || (output.value as? String)?.contains("Speak here") == true)
+        output.tap()
+        app.buttons["Kairo decides"].tap()
+        app.buttons["Presence"].tap()
+        XCTAssertTrue(app.buttons["Output: Kairo decides"].exists)
+        app.buttons["Conversation"].tap()
         XCTAssertTrue(app.staticTexts["Conversations"].waitForExistence(timeout: 5))
         capture("Conversation-portrait")
         app.buttons["Private"].tap()

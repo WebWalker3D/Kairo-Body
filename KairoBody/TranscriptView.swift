@@ -134,6 +134,7 @@ struct TranscriptView: View {
                 .tint(KairoTheme.chrome)
                 .frame(width: 130)
                 .accessibilityLabel("Output: \(model.conversation.outputDestination.rawValue)")
+                .accessibilityIdentifier("conversationOutput")
                 TextField(model.settings.followEcho
                           ? "Continue with Kairo…"
                           : "Say something to Kairo",
