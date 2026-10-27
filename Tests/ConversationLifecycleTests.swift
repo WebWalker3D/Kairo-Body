@@ -117,7 +117,9 @@ extension ConversationLifecycleTests {
         var reads = 0
         let client = make(JobTracker(request: { _, _, _ in
             reads += 1
-            return await withCheckedContinuation { release = $0; entered.fulfill() }
+            return await withCheckedContinuation { (continuation: CheckedContinuation<[String: Any], Never>) in
+                release = continuation; entered.fulfill()
+            }
         }))
         let first = Task { await client.recoverPendingTurn() }
         await fulfillment(of: [entered], timeout: 2)
@@ -135,5 +137,26 @@ extension ConversationLifecycleTests {
         XCTAssertEqual(client.draft, "Keep my question")
         XCTAssertFalse(client.hasPendingTurn)
         XCTAssertNotNil(client.error)
+    }
+}
+
+extension ConversationLifecycleTests {
+    func testExhaustedSubmissionKeepsTheOriginalRequestIdentity() async {
+        let store = PendingTurnStore(defaults: suite)
+        let tracker = JobTracker(request: { _, _, _ in throw URLError(.timedOut) }, sleep: { _ in })
+        let client = make(tracker)
+        await client.send("Do not duplicate this")
+        XCTAssertEqual(store.load()?.text, "Do not duplicate this")
+        XCTAssertEqual(client.pendingRecovery, .unconfirmed)
+        XCTAssertFalse(client.canSubmit)
+    }
+
+    func testEachStopStillStopsLocalPlayback() async {
+        let client = make(JobTracker(request: { _, _, _ in throw HTTPStatusError(status: 403) }))
+        var stops = 0
+        client.stopOutput = { stops += 1 }
+        await client.stopResponse()
+        await client.stopResponse()
+        XCTAssertEqual(stops, 2, "A later manual playback must remain stoppable")
     }
 }

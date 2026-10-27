@@ -16,7 +16,7 @@ final class AppModel: ObservableObject {
     let pairing = PairingClient()
     let feed: TranscriptFeedClient
     let presentation = PresentationClient()
-    let invitations = InvitationClient()
+    let invitations: InvitationClient
     let privateRoom = PrivateRoomClient()
     let echo = DotObserverClient()
     let voice = VoiceInputService()
@@ -54,8 +54,9 @@ final class AppModel: ObservableObject {
     }
 
     init(http: KairoHTTP = KairoHTTP(), appSettings: AppSettings? = nil,
-         pendingStore: PendingTurnStore = PendingTurnStore(), feed: TranscriptFeedClient? = nil, approvals: ApprovalClient? = nil, deliveryRequest: SurfaceDeliveryClient.Request? = nil,
+         pendingStore: PendingTurnStore = PendingTurnStore(), invitations: InvitationClient? = nil, feed: TranscriptFeedClient? = nil, approvals: ApprovalClient? = nil, deliveryRequest: SurfaceDeliveryClient.Request? = nil,
          surfaceUnobscured: @escaping @MainActor () -> Bool = { SurfaceVisibility.isUnobscured() }) {
+        self.invitations = invitations ?? InvitationClient(http: http)
         self.settings = appSettings ?? AppSettings()
         self.feed = feed ?? TranscriptFeedClient()
         self.approvals = approvals ?? ApprovalClient()

@@ -43,7 +43,9 @@ struct ResponseActivityView: View {
                             .font(.caption).foregroundStyle(KairoTheme.chrome)
                             .disabled(model.conversation.isSending)
                     }
-                } else if let turn = sharedTurn {
+                }
+                if let turn = sharedTurn, ResponseActivity.shouldShowShared(
+                    localJobID: model.conversation.responseJobID, sharedJobID: turn.id, localHasStatus: localVisible) {
                     let blocked = turn.status == "waiting_permission" || turn.settledStatus == "failed"
                     activity(title: feedFresh ? ResponseActivity.headline(status: turn.status, settled: turn.settledStatus) : "Reconnecting to conversation",
                              detail: feedFresh ? (turn.settledStatus == nil

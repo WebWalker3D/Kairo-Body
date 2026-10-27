@@ -3,6 +3,11 @@ import SwiftUI
 @testable import KairoBody
 
 final class ResponseActivityTests: XCTestCase {
+    func testLocalFailureCannotHideADifferentSharedQuestion() {
+        XCTAssertTrue(ResponseActivity.shouldShowShared(localJobID: "job_ipad", sharedJobID: "job_dot", localHasStatus: true))
+        XCTAssertFalse(ResponseActivity.shouldShowShared(localJobID: "job_dot", sharedJobID: "job_dot", localHasStatus: true))
+    }
+
     func testPermissionWaitAndFailureNeverClaimOngoingThinking() {
         XCTAssertEqual(ResponseActivity.headline(status: "waiting_permission", settled: nil), "Approval needed")
         XCTAssertEqual(ResponseActivity.headline(status: "running", settled: "failed"), "Response failed")
@@ -22,7 +27,7 @@ final class ResponseSceneTests: XCTestCase {
         var state = "running"
         let feed = TranscriptFeedClient(ownerProof: { "kbp_" + String(repeating: "z", count: 40) },
             agentAvailable: { true }, read: { _, _ in
-                var job: [String: Any] = ["id": "fixture_dot_turn", "session_id": "fixture_dot_session",
+                var job: [String: Any] = ["id": "job_fixture_dot_turn", "session_id": "fixture_dot_session",
                     "status": state, "prompt": "How do you feel?", "created_at": "2026-10-27T00:37:10Z",
                     "metadata_json": ["client": "echomuse", "surface_kind": "dot"],
                     "events": [["type": "ToolStarted", "name": "inspect_self_state", "seq": 1]]]
@@ -34,9 +39,14 @@ final class ResponseSceneTests: XCTestCase {
         defer { model.settings.echoTranscriptVisible = oldVisibility; feed.stop() }
         model.settings.echoTranscriptVisible = true
         feed.followAllSurfaces(foreground: true)
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 1280, height: 884))
-        window.rootViewController = UIHostingController(rootView: PresenceStageView()
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(x: 0, y: 0, width: 1280, height: 884)
+        let host = UIHostingController(rootView: PresenceStageView()
             .environmentObject(model).preferredColorScheme(.dark))
+        window.rootViewController = host
+        window.windowLevel = .alert + 1
+        host.view.frame = window.bounds
         window.makeKeyAndVisible()
         defer { window.isHidden = true }
         for phase in ["running", "waiting_permission", "completed"] {
@@ -45,7 +55,17 @@ final class ResponseSceneTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(250))
             XCTAssertEqual(feed.turns.last?.status, phase)
             window.layoutIfNeeded()
-            let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in window.drawHierarchy(in: window.bounds, afterScreenUpdates: true) }
+            host.view.layoutIfNeeded()
+            let image = UIGraphicsImageRenderer(bounds: host.view.bounds).image { _ in
+                XCTAssertTrue(host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true))
+            }
+            let cg = try XCTUnwrap(image.cgImage)
+            let data = try XCTUnwrap(cg.dataProvider?.data) as Data
+            let bytes = [UInt8](data)
+            let lit = stride(from: 0, to: bytes.count - 3, by: 4).filter {
+                Int(bytes[$0]) + Int(bytes[$0 + 1]) + Int(bytes[$0 + 2]) > 150
+            }.count
+            XCTAssertGreaterThan(lit, 1000, "A blank scene is not visual evidence")
             let attachment = XCTAttachment(image: image)
             attachment.name = "Dot-response-\(phase)"; attachment.lifetime = .keepAlways; add(attachment)
         }

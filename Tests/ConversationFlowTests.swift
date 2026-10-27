@@ -99,3 +99,43 @@ final class ConversationFlowTests: XCTestCase {
         XCTAssertNotNil(client.error)
     }
 }
+
+extension ConversationFlowTests {
+    func testInvitationAcceptanceReservesItsConversationHandoff() async throws {
+        let suiteName = "InvitationHandoff.\(UUID())"
+        let suite = UserDefaults(suiteName: suiteName)!
+        defer { suite.removePersistentDomain(forName: suiteName); ConversationHTTPFixture.respond = nil }
+        let accepting = expectation(description: "acceptance in flight")
+        var release: CheckedContinuation<[String: Any], Never>?
+        let invitation = InvitationClient(ownerProof: { "kbp_" + String(repeating: "v", count: 40) }, request: { _, method, body in
+            if method == "GET" {
+                return ["invitation": ["id": "1", "text": "Continue our earlier thought", "origin": "kairo",
+                                       "source_event_id": 7, "session_id": "source_session",
+                                       "expires_at": ISO8601DateFormatter().string(from: Date().addingTimeInterval(60))]]
+            }
+            if body?["status"] as? String == "answered" {
+                return await withCheckedContinuation { release = $0; accepting.fulfill() }
+            }
+            return ["accepted": true]
+        })
+        var postedPaths: [String] = []
+        ConversationHTTPFixture.respond = { request in
+            postedPaths.append(request.url!.path)
+            return (403, [:])
+        }
+        let model = AppModel(http: http(), appSettings: AppSettings(defaults: suite),
+                             pendingStore: PendingTurnStore(defaults: suite), invitations: invitation)
+        model.settings.followEcho = false
+        model.settings.sharedSessionID = "session_local"
+        model.conversation.prepareOutput = nil
+        await invitation.refresh(foreground: true)
+        await invitation.markDisplayed()
+        let first = Task { await model.acceptInvitationIntoConversation() }
+        await fulfillment(of: [accepting], timeout: 2)
+        let accepted = await model.conversation.send("Intervening request")
+        XCTAssertFalse(accepted, "Acceptance must reserve the handoff before awaiting its receipt")
+        release?.resume(returning: ["accepted": true])
+        await first.value
+        XCTAssertEqual(postedPaths, ["/api/sessions/source_session/jobs"])
+    }
+}
