@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import CoreFoundation
 
 struct PendingApproval: Equatable {
@@ -12,11 +13,12 @@ struct PendingApproval: Equatable {
 
 /// Explicit once-only owner decisions. The observer itself uses agent authentication.
 @MainActor
-final class ApprovalClient: ObservableObject {
-    @Published private(set) var approval: PendingApproval?
-    @Published private(set) var busy = false
-    @Published private(set) var error: String?
-    @Published private(set) var status = ""
+@Observable
+final class ApprovalClient {
+    private(set) var approval: PendingApproval?
+    private(set) var busy = false
+    private(set) var error: String?
+    private(set) var status = ""
     private let ownerProof: () -> String
     private let now: () -> Date
     private let request: (String, String, [String: Any]?) async throws -> [String: Any]

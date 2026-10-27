@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 /// Read-only projection of Kairo conversations across paired owner surfaces
 /// (`/api/ipad/conversations`, conditional with ETag). There is no
@@ -6,18 +7,20 @@ import Foundation
 /// authority is absent, it can fall back to following only the configured
 /// Dot session through the ordinary Agent API.
 @MainActor
-final class TranscriptFeedClient: ObservableObject {
-    @Published private(set) var turns: [ConversationTurn] = []
-    @Published private(set) var liveState: LiveStateSnapshot?
-    @Published private(set) var error: String?
-    @Published private(set) var following = false
+@Observable
+final class TranscriptFeedClient {
+    private(set) var turns: [ConversationTurn] = [] { didSet { onTurnsChange?() } }
+    var onTurnsChange: (() -> Void)?
+    private(set) var liveState: LiveStateSnapshot?
+    private(set) var error: String?
+    private(set) var following = false
     /// Shown beside a transcript that is kept while Kairo cannot be reached.
-    @Published private(set) var connectionTrouble: String?
-    @Published private(set) var lastUpdatedAt: Date?
+    private(set) var connectionTrouble: String?
+    private(set) var lastUpdatedAt: Date?
     /// When Kairo last settled an answer on ANY surface, as observed here.
     /// The iPad is a surface, not a separate Kairo: a Discord answer is the
     /// body's own answer to show.
-    @Published private(set) var lastAnsweredAt: Date?
+    private(set) var lastAnsweredAt: Date?
     var processing: Bool {
         following && connectionTrouble == nil &&
         lastUpdatedAt.map { Date().timeIntervalSince($0) < 30 } == true &&

@@ -4,7 +4,7 @@ import SwiftUI
 /// Discord, the phone, this iPad — from the owner-scoped feed. Replying here
 /// writes into the same conversation Kairo is holding with the Dot.
 struct TranscriptView: View {
-    @EnvironmentObject private var model: AppModel
+    @Environment(AppModel.self) private var model
     @FocusState private var composerFocused: Bool
 
     var body: some View {
@@ -36,7 +36,7 @@ struct TranscriptView: View {
             }
             composer
         }
-        .padding(.bottom, 84)
+        .padding(.bottom, 96)
         .background(KairoTheme.background)
     }
 
@@ -188,7 +188,7 @@ struct TurnCard: View {
                 Eyebrow(text: turn.sourceCaption, color: surfaceColor)
                 Spacer()
                 Text(turn.createdAt)
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(.system(size: 13, design: .monospaced))
                     .foregroundStyle(KairoTheme.faint)
             }
             Text(turn.prompt)
@@ -205,7 +205,7 @@ struct TurnCard: View {
             if !turn.toolActivity.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
                     ForEach(turn.toolActivity.suffix(4), id: \.self) { activity in
-                        Text(activity).font(.caption2).foregroundStyle(KairoTheme.chrome)
+                        Text(activity).font(.footnote).foregroundStyle(KairoTheme.chrome)
                     }
                 }
             }
@@ -222,7 +222,7 @@ struct TurnCard: View {
                     .textSelection(.enabled)
             }
             if let usage = turn.usage.caption {
-                Text(usage).font(.system(size: 10, design: .monospaced)).foregroundStyle(KairoTheme.faint)
+                Text(usage).font(.system(size: 13, design: .monospaced)).foregroundStyle(KairoTheme.faint)
             }
         }
     }

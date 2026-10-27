@@ -5,26 +5,27 @@ import SwiftUI
 /// credentials once under Credential setup; a replacement install inherits
 /// everything and these rows simply report what the device already holds.
 struct SettingsView: View {
-    @EnvironmentObject private var model: AppModel
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         NavigationStack {
             SettingsForm(settings: model.settings, voice: model.voice, pairing: model.pairing)
                 .navigationTitle("Settings")
                 .scrollContentBackground(.hidden)
+                .contentMargins(.bottom, 100, for: .scrollContent)
                 .background(KairoTheme.background)
         }
     }
 }
 
-/// The toggles bind through observed objects (a `let` reference on the model
-/// cannot carry `$model.settings.x`), and the change handlers live where the
-/// observation does.
+/// The toggles bind through a bindable settings reference (a `let` reference
+/// on the model cannot carry `$model.settings.x`), and the change handlers
+/// live where the observation does.
 private struct SettingsForm: View {
-    @ObservedObject var settings: AppSettings
-    @ObservedObject var voice: VoiceInputService
-    @ObservedObject var pairing: PairingClient
-    @EnvironmentObject private var model: AppModel
+    @Bindable var settings: AppSettings
+    let voice: VoiceInputService
+    let pairing: PairingClient
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         Form {

@@ -167,8 +167,7 @@ extension ConversationFlowTests {
                                        pendingStore: PendingTurnStore(defaults: suite))
         client.outputDestination = .silent
         var observed: [String] = []
-        let observation = client.$observedStatus.sink { observed.append($0) }
-        defer { observation.cancel() }
+        client.onObservedStatusChange = { observed.append($0) }
         await client.send("A question")
         XCTAssertTrue(observed.contains("waiting_permission"))
         XCTAssertEqual(eventReads, 1, "Null settlement is active; completed answers skip optional event reads")

@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 struct MemoryProposal {
     let id: String
@@ -33,14 +34,15 @@ enum PrivateBodyError: LocalizedError {
 /// person answers Keep or Dismiss on this device; keeping grants permission
 /// for that exact note, and Kairo separately decides whether to adopt it.
 @MainActor
-final class PrivateRoomClient: ObservableObject {
-    @Published private(set) var privateSessionID: String?
-    @Published private(set) var status = ""
-    @Published private(set) var error: String?
-    @Published private(set) var reply = ""
-    @Published private(set) var busy = false
-    @Published private(set) var memoryProposal: MemoryProposal?
-    @Published private(set) var decidingMemory = false
+@Observable
+final class PrivateRoomClient {
+    private(set) var privateSessionID: String?
+    private(set) var status = ""
+    private(set) var error: String?
+    private(set) var reply = ""
+    private(set) var busy = false
+    private(set) var memoryProposal: MemoryProposal?
+    private(set) var decidingMemory = false
     typealias Request = (String, String, [String: Any]?, TimeInterval) async throws -> [String: Any]
     private let request: Request
     private let ownerProof: () -> String
@@ -58,7 +60,7 @@ final class PrivateRoomClient: ObservableObject {
         var body: [String: Any]?
         var jobID: String?
     }
-    @Published private var pending: PendingRequest?
+    private var pending: PendingRequest?
     var hasPendingTurn: Bool { pending != nil }
 
     init(http: KairoHTTP = KairoHTTP(),

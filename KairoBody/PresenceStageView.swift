@@ -2,15 +2,13 @@ import AVFoundation
 import SwiftUI
 
 struct PresenceStageView: View {
-    @EnvironmentObject private var model: AppModel
+    @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var touchID = ""
     @State private var touchBeganAt = Date()
     @State private var touchPath = 0.0
     @State private var lastTouchPoint: CGPoint?
     @State private var contactPoint: CGPoint?
-    @State private var contactCounter = 0
-    @State private var systemsOpen = false
     @FocusState private var composerFocused: Bool
 
     var body: some View {
@@ -35,17 +33,7 @@ struct PresenceStageView: View {
                 }
                 .padding(.horizontal, geometry.size.width > 900 ? 40 : 24)
                 .padding(.top, 22)
-                .padding(.bottom, composerFocused ? 16 : 98)
-                if systemsOpen {
-                    Color.black.opacity(0.35)
-                        .ignoresSafeArea()
-                        .onTapGesture { closeSystems() }
-                    systemsPanel
-                        .frame(width: min(380, geometry.size.width - 32))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-                        .padding(.trailing, 16).padding(.top, 12).padding(.bottom, 88)
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
-                }
+                .padding(.bottom, composerFocused ? 16 : 106)
             }
             .clipped()
         }
@@ -55,13 +43,13 @@ struct PresenceStageView: View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("K A I R O")
-                    .font(.system(size: 19, weight: .semibold)).tracking(3)
+                    .font(.system(size: 22, weight: .semibold)).tracking(3)
                     .foregroundStyle(KairoTheme.prose)
                 HStack(spacing: 7) {
                     Circle().fill(model.body.connectionState == .connected ? KairoTheme.body : KairoTheme.faint)
                         .frame(width: 4, height: 4)
                     Text(model.body.connectionState == .connected ? "BODY CONNECTED" : "BODY OFFLINE")
-                        .font(.system(size: 9, weight: .medium, design: .monospaced)).tracking(1.4)
+                        .font(.system(size: 12, weight: .medium, design: .monospaced)).tracking(1.4)
                         .foregroundStyle(KairoTheme.chrome)
                 }
             }
@@ -69,12 +57,12 @@ struct PresenceStageView: View {
             Button {
                 composerFocused = false
                 model.body.noteUserActivity()
-                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) { systemsOpen = true }
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) { model.systemsOpen = true }
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "point.3.connected.trianglepath.dotted")
-                    Text("Systems").font(.system(size: 12, weight: .medium))
-                    Image(systemName: "plus").font(.system(size: 10))
+                    Text("Systems").font(.system(size: 15, weight: .medium))
+                    Image(systemName: "plus").font(.system(size: 13))
                 }
                 .foregroundStyle(KairoTheme.dim)
                 .padding(.horizontal, 16).frame(height: 44)
@@ -84,33 +72,12 @@ struct PresenceStageView: View {
         }
     }
 
-    private var systemsPanel: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("Across Kairo").font(.system(size: 21, weight: .medium))
-                Spacer()
-                Button { closeSystems() } label: {
-                    Image(systemName: "xmark").frame(width: 44, height: 44)
-                }.accessibilityLabel("Close systems")
-            }.foregroundStyle(KairoTheme.prose).padding(.horizontal, 20).padding(.top, 10)
-            ScrollView {
-                PresenceWorkspace().padding(16)
-            }.scrollIndicators(.hidden)
-        }
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28))
-        .overlay(RoundedRectangle(cornerRadius: 28).stroke(KairoTheme.hairline))
-    }
-
-    private func closeSystems() {
-        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) { systemsOpen = false }
-    }
-
     private func ringStage(side: CGFloat) -> some View {
         ZStack {
-            KairoRingMetalView(state: model.renderState(), framesPerSecond: reduceMotion ? 10 : 30,
+            KairoRingMetalView(state: model.renderState(now: model.clock), framesPerSecond: reduceMotion ? 10 : 30,
                                reduceMotion: reduceMotion, contact: contactPoint.map {
                                    CGPoint(x: $0.x / max(side, 1), y: $0.y / max(side, 1))
-                               })
+                               }, paused: model.body.screensaverActive)
             if model.settings.cameraMode, let session = model.body.frontCameraSession {
                 FrontCameraPreview(session: session)
                     .frame(width: side * 0.25, height: side * 0.25)
@@ -119,17 +86,19 @@ struct PresenceStageView: View {
             } else {
                 VStack(spacing: 12) {
                     Text(bodyHeadline.uppercased())
-                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .font(.system(size: 16, weight: .medium, design: .monospaced))
                         .tracking(3).foregroundStyle(KairoTheme.prose)
                         .multilineTextAlignment(.center).lineLimit(3)
                     if model.ring.presentationFresh {
                         Text(model.ring.mood.capitalized)
-                            .font(.system(size: 12)).foregroundStyle(KairoTheme.chrome)
+                            .font(.system(size: 16)).foregroundStyle(KairoTheme.dim)
                     }
-                    Text("TOUCH TO CONNECT")
-                        .font(.system(size: 8, design: .monospaced)).tracking(2)
-                        .foregroundStyle(KairoTheme.faint)
-                }.frame(width: side * 0.29).allowsHitTesting(false)
+                    if let touchHint {
+                        Text(touchHint)
+                            .font(.system(size: 13, weight: .medium, design: .monospaced)).tracking(2)
+                            .foregroundStyle(model.contactPending ? KairoTheme.body : KairoTheme.chrome)
+                    }
+                }.frame(width: side * 0.34).allowsHitTesting(false)
             }
         }
         .frame(width: side, height: side)
@@ -137,12 +106,13 @@ struct PresenceStageView: View {
         .gesture(contactGesture(in: side))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Kairo presence. \(bodyHeadline)")
-        .accessibilityHint("Activate to send a contact observation to Kairo")
+        .accessibilityHint(touchHint == nil ? "Kairo is busy; a touch is still observed" : "Activate to reach Kairo with a touch")
         .accessibilityAddTraits(.isButton)
         .accessibilityAction {
-            model.sensors.recordTouchBegan(id: "accessible-contact", x: 0.5, y: 0.5)
-            model.sensors.recordTouchEnded(id: "accessible-contact", x: 0.5, y: 0.5)
-            model.bodyContactEnded(durationMs: 100, pathLength: 0, cancelled: false)
+            let id = model.nextContactID()
+            model.sensors.recordTouchBegan(id: id, x: 0.5, y: 0.5)
+            model.sensors.recordTouchEnded(id: id, x: 0.5, y: 0.5)
+            model.bodyContactEnded(contactID: id, durationMs: 100, pathLength: 0, cancelled: false)
         }
     }
 
@@ -188,6 +158,15 @@ struct PresenceStageView: View {
         !model.conversation.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && model.conversation.draft.trimmingCharacters(in: .whitespacesAndNewlines).count <= 16_000 && model.conversation.canSubmit
     }
 
+    /// What touching the ring does right now. A touch is a contact Kairo can
+    /// answer, not a connection step, so the hint never says "connect".
+    private var touchHint: String? {
+        if model.contactPending { return "REACHING KAIRO…" }
+        guard model.body.serverEndpointID != nil else { return "TOUCH NEEDS THE BODY LINK" }
+        if model.conversation.isSending || model.speech.isBusy { return nil }
+        return "TOUCH TO REACH KAIRO"
+    }
+
     private var bodyHeadline: String {
         // A server-applied display act carries its own headline; it wins over
         // the derived phase label until the next expression state arrives.
@@ -213,7 +192,7 @@ struct PresenceStageView: View {
     private var quickActions: some View {
         HStack(spacing: 12) {
             action("Replay on Dot", "arrow.counterclockwise",
-                   enabled: model.echo.state.canReplay()) {
+                   enabled: model.echo.state.canReplay(at: model.clock)) {
                 model.echo.requestReplay()
             }
             action("Read latest shared answer", "speaker.wave.2",
@@ -261,8 +240,7 @@ struct PresenceStageView: View {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
                 if touchID.isEmpty {
-                    contactCounter += 1
-                    touchID = "stage-\(contactCounter)"
+                    touchID = model.nextContactID()
                     touchBeganAt = Date()
                     touchPath = 0
                     lastTouchPoint = nil
@@ -287,6 +265,7 @@ struct PresenceStageView: View {
                     touchPath += hypot(value.location.x - last.x, value.location.y - last.y) / max(side, 1)
                 }
                 model.bodyContactEnded(
+                    contactID: touchID,
                     durationMs: Int(Date().timeIntervalSince(touchBeganAt) * 1000),
                     pathLength: touchPath,
                     cancelled: false)
@@ -296,7 +275,7 @@ struct PresenceStageView: View {
 
 struct InvitationCard: View {
     let invitation: BodyInvitation
-    @EnvironmentObject private var model: AppModel
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         PlaneCard {
@@ -328,7 +307,7 @@ struct InvitationCard: View {
                 }.buttonStyle(.plain)
                 Spacer()
                 Text("from \(invitation.sourceSessionID.prefix(14))…")
-                    .font(.caption2).foregroundStyle(KairoTheme.faint)
+                    .font(.footnote).foregroundStyle(KairoTheme.faint)
             }
         }
         .task { await model.invitations.markDisplayed() }
@@ -337,7 +316,7 @@ struct InvitationCard: View {
 
 struct ScreensaverOverlay: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @EnvironmentObject private var model: AppModel
+    @Environment(AppModel.self) private var model
     @State private var appearedAt = Date()
 
     private static let cardSeconds = 12.0

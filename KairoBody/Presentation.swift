@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 /// A short-lived visual snapshot from `/api/ipad/presentation`. Contains no
 /// conversation or appraisal text — only the settled activity phase, the
@@ -95,8 +96,9 @@ enum BodySurfaceActivity: Equatable {
 /// Polls the paired-owner presentation on a steady cadence. Failed reads keep
 /// the previous fresh snapshot; they never invent mood.
 @MainActor
-final class PresentationClient: ObservableObject {
-    @Published private(set) var snapshot: GlobalBodyPresentation?
+@Observable
+final class PresentationClient {
+    private(set) var snapshot: GlobalBodyPresentation?
     private let http: KairoHTTP
     private var loop: Task<Void, Never>?
     private var generation = UUID()

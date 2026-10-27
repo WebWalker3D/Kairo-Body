@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 /// Deliberately narrow projection. Private dream text and appraisal never
 /// become stored properties, logs, UI, or conversation context on this surface.
@@ -46,11 +47,12 @@ struct SystemCapability: Identifiable {
 }
 
 @MainActor
-final class SystemsClient: ObservableObject {
-    @Published private(set) var rest: RestProjection?
-    @Published private(set) var capabilities: [SystemCapability] = []
-    @Published private(set) var updatedAt: Date?
-    @Published private(set) var unavailable = true
+@Observable
+final class SystemsClient {
+    private(set) var rest: RestProjection?
+    private(set) var capabilities: [SystemCapability] = []
+    private(set) var updatedAt: Date?
+    private(set) var unavailable = true
     private var loop: Task<Void, Never>?
     private var generation = UUID()
     private let request: (String) async throws -> Any

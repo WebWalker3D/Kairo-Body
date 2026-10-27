@@ -1,10 +1,12 @@
 import Foundation
+import Observation
 import AVFoundation
 
 /// Plays Kairo's server-selected voice. The authenticated Agent API owns the
 /// voice profile; synthesis is chunked so playback starts before the whole
 /// answer exists, the way the Dot hears it.
 @MainActor
+@Observable
 final class SpeechService {
     var onPlaybackStateChange: ((Bool) -> Void)?
     var onAvailabilityChange: (() -> Void)?

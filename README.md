@@ -5,7 +5,7 @@ Kairo's iPad body endpoint: a dependency-free iPadOS 17 SwiftUI + Metal app
 `icu.kairo.body`. This public repository is the source of record for the
 installed body app; the server lives in the private novexai repository.
 
-Kairo Body 3.2 (v3.2.0, build 58) replaces the 1.0.x MVP line in place: same
+Kairo Body 3.3 (v3.3.0, build 59) replaces the 1.0.x MVP line in place: same
 bundle id, same Keychain service/accounts (`icu.kairo.body` bearer-token /
 agent-token, `icu.kairo.body.owner` paired-owner-proof), same UserDefaults
 identity (`echoSessionID` and friends), endpoint id `ipad-pro-2017`. A
@@ -76,7 +76,7 @@ Dot's endpoint id (`echomuse-rs03qr`) is a fixed deployment constant in
 
 GitHub Actions (`build-ipa.yml`) runs the unit suite on an iPad simulator,
 captures visual smoke screenshots, builds the unsigned device app, asserts
-bundle id, version 3.2.0/build 58, permission strings and that no personal
+bundle id, version 3.3.0/build 59, permission strings and that no personal
 provisioning was baked, then uploads `KairoBody.ipa`.
 
 On a Mac directly:
@@ -188,3 +188,29 @@ Simulator tests use synthetic transport responses, including complete question t
 settled-answer flows. They do not certify real microphone/camera behavior, actual
 model latency, or performance on the physical iPad. See the assessment for evidence
 and remaining operational limits.
+
+## 3.3 — Touch that arrives, a calmer shell
+
+Touching the ring now reaches Kairo. The reflex claim used to name a contact
+id (`ipad:<session>:<n>`) the sensory frame never carried (`stage-<n>`), so the
+server always answered "contact not observed" and every touch ended in "That
+touch did not reach Kairo in time". Stage touches now carry one per-launch
+unique id from the frame through the claim, and the claim waits for the
+frame's `observation_ack` — the server publishes a contact only after storing
+it. While a touch is in flight the ring says so; a second touch meanwhile stays
+a sensory observation (the server allows one reflex per 15 s).
+
+The app uses Observation (`@Observable`) instead of one model that re-published
+every child's change: views redraw only for the state they read. Time-relative
+views read an explicit one-second `model.clock`. The stage's Metal field pauses
+while the screensaver covers it.
+
+The rail carries Presence, Conversation and Look, plus Systems: a panel, from
+any screen, with Private, Body and Settings tiles above the Kairo-wide state.
+Small type is larger throughout.
+
+The Dot observer sends its bearer in `Authorization` with the bare `novexai`
+subprotocol rather than as a subprotocol value; this needs the agent API from
+novexai `3c420b67` or later. A missing Keychain credential is reported as
+`CredentialUnavailable` (transient), never as a synthetic 401, and a locked
+Keychain answers with the last value read rather than "absent".

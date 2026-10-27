@@ -1,13 +1,15 @@
 import Foundation
+import Observation
 
 /// Executes one already-settled, atomically claimed answer on this iPad.
 /// Never queues on reconnect: an answer that left the foreground reports
 /// failure so Kairo can choose another surface honestly.
 @MainActor
-final class SurfaceDeliveryClient: ObservableObject {
+@Observable
+final class SurfaceDeliveryClient {
     typealias Request = (String, [String: Any]?) async throws -> [String: Any]
-    @Published private(set) var busy = false
-    @Published private(set) var error: String?
+    private(set) var busy = false
+    private(set) var error: String?
     var display: (String) async -> Bool = { _ in false }
     var speak: (String, @escaping (ActionPhase, String) -> Void) -> Bool = { _, _ in false }
     var stopSpeech: () -> Void = {}
@@ -21,7 +23,7 @@ final class SurfaceDeliveryClient: ObservableObject {
         let owner: String
         var key: String { target + ":" + job }
     }
-    @Published private var pendingReceipts: [String: Receipt] = [:]
+    private var pendingReceipts: [String: Receipt] = [:]
     var hasUnconfirmedReceipts: Bool { !pendingReceipts.isEmpty }
     private var reporting = Set<String>()
     private var active: (job: String, target: String)?

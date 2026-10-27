@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import UIKit
 import AVFoundation
 
@@ -7,7 +8,8 @@ import AVFoundation
 /// execution with an action-event lifecycle, and ingestion receipts for
 /// camera and one-shot location observations.
 @MainActor
-final class BodyClient: ObservableObject {
+@Observable
+final class BodyClient {
     enum ConnectionState: String {
         case stopped = "Stopped"
         case connecting = "Connecting"
@@ -27,15 +29,15 @@ final class BodyClient: ObservableObject {
 
     var applyDisplay: (DisplayState) async -> Bool = { _ in false }
 
-    @Published private(set) var connectionState: ConnectionState = .stopped
-    @Published private(set) var lastError: String?
-    @Published private(set) var lastFrameAt: Date?
-    @Published private(set) var lastSensorFrame: SensorFrame?
-    @Published var display = DisplayState()
-    @Published private(set) var screensaverActive = false
-    @Published private(set) var frontCameraSession: AVCaptureSession?
-    @Published private(set) var capabilitiesConfirmedAt: Date?
-    @Published private(set) var serverEndpointID: String?
+    private(set) var connectionState: ConnectionState = .stopped
+    private(set) var lastError: String?
+    private(set) var lastFrameAt: Date?
+    private(set) var lastSensorFrame: SensorFrame?
+    var display = DisplayState()
+    private(set) var screensaverActive = false
+    private(set) var frontCameraSession: AVCaptureSession?
+    private(set) var capabilitiesConfirmedAt: Date?
+    private(set) var serverEndpointID: String?
 
     private let settings: AppSettings
     private let sensors: SensorManager
@@ -62,6 +64,8 @@ final class BodyClient: ObservableObject {
     private var gate = TransportGate()
     private var shouldRun = false
     private var sequence = 0
+    /// Highest frame sequence the server acknowledged as stored this session.
+    private var acknowledgedSequence = 0
     private var reconnectAttempt = 0
     private var capabilitiesNegotiated = false
     private var actionEventsNegotiated = false
@@ -112,6 +116,7 @@ final class BodyClient: ObservableObject {
         }
         shouldRun = true
         sequence = 0
+        acknowledgedSequence = 0
         reconnectAttempt = 0
         lastError = nil
         sensors.start(sendLocation: settings.sendLocation)
@@ -356,7 +361,18 @@ final class BodyClient: ObservableObject {
             if wait > 0 { do { try await Task.sleep(for: .seconds(wait)) } catch { return false } }
         }
         guard shouldRun, isForeground, connectionState == .connected, serverEndpointID != nil else { return false }
+        // The next frame carries the ended contact. The server publishes a
+        // contact for reflex claims only after that frame is stored, and its
+        // observation_ack follows; claiming earlier is refused as unobserved.
+        let carrier = sequence + 1
         await sendSensorFrame()
+        let deadline = Date().addingTimeInterval(20)
+        while acknowledgedSequence < carrier, Date() < deadline {
+            guard shouldRun, connectionState == .connected else { return false }
+            do { try await Task.sleep(for: .milliseconds(100)) } catch { return false }
+        }
+        // Without an ack the claim still runs: the server is the authority on
+        // whether it observed the contact, and refuses honestly if not.
         return true
     }
 
@@ -585,6 +601,7 @@ final class BodyClient: ObservableObject {
             }
             if object["type"] as? String == "observation_ack",
                let seq = object["sequence"] as? Int, let observation = object["observationID"] as? String {
+                acknowledgedSequence = max(acknowledgedSequence, seq)
                 observationDelivery.acknowledge(sequence: seq, observationID: observation)
                 return
             }

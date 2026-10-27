@@ -54,7 +54,7 @@ final class ResponseSceneTests: XCTestCase {
         let window = UIWindow(windowScene: scene)
         window.frame = CGRect(x: 0, y: 0, width: 1280, height: 884)
         let host = UIHostingController(rootView: PresenceStageView()
-            .environmentObject(model).preferredColorScheme(.dark))
+            .environment(model).preferredColorScheme(.dark))
         window.rootViewController = host
         window.windowLevel = .alert + 1
         host.view.frame = window.bounds

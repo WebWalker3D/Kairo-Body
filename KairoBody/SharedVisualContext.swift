@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import Combine
 
 enum VisualSource: String { case frontCamera, selectedImage }
@@ -8,15 +9,16 @@ enum VisualSource: String { case frontCamera, selectedImage }
 /// description attachment id travels with later questions, so the shared
 /// conversation (Dot included) can reference what the iPad showed.
 @MainActor
-final class SharedVisualContext: ObservableObject {
-    @Published private(set) var attachmentID: String?
-    @Published private(set) var sha256: String?
-    @Published private(set) var source: VisualSource?
-    @Published private(set) var observedAt: Date?
-    @Published private(set) var sessionID: String?
-    @Published var previewJPEG: Data?
-    @Published private(set) var error: String?
-    @Published private(set) var discussionReply = ""
+@Observable
+final class SharedVisualContext {
+    private(set) var attachmentID: String?
+    private(set) var sha256: String?
+    private(set) var source: VisualSource?
+    private(set) var observedAt: Date?
+    private(set) var sessionID: String?
+    var previewJPEG: Data?
+    private(set) var error: String?
+    private(set) var discussionReply = ""
     private(set) var generation = UUID()
 
     @discardableResult

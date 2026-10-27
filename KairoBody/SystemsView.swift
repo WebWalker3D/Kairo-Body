@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct RestStatusCard: View {
-    @EnvironmentObject private var model: AppModel
+    @Environment(AppModel.self) private var model
     var body: some View {
         HStack(spacing: 13) {
             Image(systemName: symbol).font(.system(size: 22, weight: .light))
@@ -11,10 +11,10 @@ struct RestStatusCard: View {
                     .font(.system(size: 14, weight: .medium)).foregroundStyle(KairoTheme.prose)
                 if let rest = model.systems.freshRest {
                     Text("Reported \(rest.observedAt, style: .relative) ago")
-                        .font(.system(size: 10)).foregroundStyle(KairoTheme.faint)
+                        .font(.system(size: 13)).foregroundStyle(KairoTheme.faint)
                 } else {
                     Text(model.pairing.isPaired ? "Waiting for a fresh state" : "Owner pairing required")
-                        .font(.system(size: 10)).foregroundStyle(KairoTheme.faint)
+                        .font(.system(size: 13)).foregroundStyle(KairoTheme.faint)
                 }
             }
             Spacer()
@@ -39,7 +39,7 @@ struct RestStatusCard: View {
 }
 
 struct CapabilityCatalogue: View {
-    @EnvironmentObject private var model: AppModel
+    @Environment(AppModel.self) private var model
     @State private var search = ""
     private var filtered: [SystemCapability] {
         model.systems.capabilities.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) || $0.detail.localizedCaseInsensitiveContains(search) }
@@ -76,13 +76,13 @@ struct CapabilityCatalogue: View {
                                 Text(capability.name).font(.system(size: 14, weight: .medium)).foregroundStyle(KairoTheme.prose)
                                 Spacer()
                                 Text(capability.enabled ? "ENABLED" : "DISABLED")
-                                    .font(.system(size: 8, weight: .medium, design: .monospaced))
+                                    .font(.system(size: 12, weight: .medium, design: .monospaced))
                                     .foregroundStyle(capability.enabled ? KairoTheme.body : KairoTheme.faint)
                             }
                             Text(capability.detail).font(.system(size: 12)).foregroundStyle(KairoTheme.chrome).lineLimit(5)
                             if !capability.prerequisites.isEmpty {
                                 Text("Requires: " + capability.prerequisites.joined(separator: " · "))
-                                    .font(.system(size: 10)).foregroundStyle(KairoTheme.faint).lineLimit(3)
+                                    .font(.system(size: 13)).foregroundStyle(KairoTheme.faint).lineLimit(3)
                             }
                         }.frame(maxWidth: .infinity, alignment: .leading).padding(18)
                             .background(KairoTheme.plane.opacity(0.7), in: RoundedRectangle(cornerRadius: 18))

@@ -1,5 +1,5 @@
 import AVFoundation
-import Combine
+import Observation
 import Foundation
 import UIKit
 
@@ -8,7 +8,8 @@ import UIKit
 /// one invitation loop alive, and publishes the single derived ring state the
 /// whole app renders.
 @MainActor
-final class AppModel: ObservableObject {
+@Observable
+final class AppModel {
     let approvals: ApprovalClient
     let systems = SystemsClient()
     let settings: AppSettings
@@ -27,14 +28,22 @@ final class AppModel: ObservableObject {
     let conversation: ConversationClient
     let surfaceDelivery: SurfaceDeliveryClient
 
-    @Published var destination: Destination = .stage
-    @Published private(set) var ring = RingMirrorState()
-    @Published private(set) var isForeground = true
-    @Published var exportedArtifact: URL?
-    @Published private(set) var stageDisplayText: String?
-    @Published private(set) var lastContactAt: Date?
-    @Published private(set) var dotPhaseObservedAt: Date?
-    @Published private(set) var stageDisplayID = UUID()
+    var destination: Destination = .stage
+    /// The Systems panel: the secondary places plus Kairo-wide state, reachable
+    /// from the rail on every screen and from the stage header.
+    var systemsOpen = false
+    private(set) var ring = RingMirrorState()
+    private(set) var isForeground = true
+    var exportedArtifact: URL?
+    private(set) var stageDisplayText: String?
+    private(set) var lastContactAt: Date?
+    private(set) var dotPhaseObservedAt: Date?
+    private(set) var stageDisplayID = UUID()
+    /// The one-second tick. Views whose content depends on elapsed time
+    /// (freshness, leases) read it; nothing else redraws on the tick.
+    private(set) var clock = Date()
+    /// A stage touch is on its way to Kairo (frame, store, reflex claim).
+    private(set) var contactPending = false
     private var acknowledgedDisplayID: UUID?
     private var rootSurfaceVisible = false
     private let surfaceUnobscured: @MainActor () -> Bool
@@ -52,6 +61,11 @@ final class AppModel: ObservableObject {
         case bodySurface = "Body"
         case settings = "Settings"
         var id: String { rawValue }
+
+        /// The rail carries the three places used daily; the rest live in
+        /// the Systems panel.
+        static let primary: [Destination] = [.stage, .conversation, .look]
+        var isPrimary: Bool { Self.primary.contains(self) }
     }
 
     init(http: KairoHTTP = KairoHTTP(), pairingClient: PairingClient? = nil, appSettings: AppSettings? = nil,
@@ -84,30 +98,33 @@ final class AppModel: ObservableObject {
             await self?.surfaceDelivery.deliver(jobID: job, destination: destination)
         }
         conversation.stopOutput = { [weak self] in self?.surfaceDelivery.stop() }
-        forwardChangePublishers()
-        forwardCancellables.append(conversation.$isSending.removeDuplicates().sink { [weak self] busy in
-            guard let self else { return }
-            self.voice.configure(conversationBusy: busy || self.speech.isBusy)
-            if !busy && !self.speech.isBusy { self.voice.responseFinished() }
-        })
-        forwardCancellables.append(echo.$state.map { $0.activity?.phase }.removeDuplicates().sink { [weak self] phase in
+        // Observation tracks exactly what each view reads. These are the
+        // few cross-client reactions, wired as explicit change hooks.
+        conversation.onSendingChange = { [weak self] busy in self?.localBusyChanged(sending: busy) }
+        echo.onPhaseChange = { [weak self] phase in
             guard let self else { return }
             self.dotPhaseObservedAt = phase == nil ? nil : Date()
             guard self.isForeground, phase != nil else { return }
             Task { if self.isForeground { await self.feed.refresh() } }
-        })
-        forwardCancellables.append(self.feed.$turns.sink { [weak self] _ in
-            Task { @MainActor in await self?.refreshApprovalTracking() }
-        })
-        forwardCancellables.append(conversation.$observedStatus.removeDuplicates().sink { [weak self] _ in
-            Task { @MainActor in await self?.refreshApprovalTracking() }
-        })
-        speech.onPlaybackStateChange = { [weak self] busy in
-            guard let self else { return }
-            self.voice.configure(conversationBusy: busy || self.conversation.isSending)
-            if !busy && !self.conversation.isSending { self.voice.responseFinished() }
-            self.objectWillChange.send()
         }
+        self.feed.onTurnsChange = { [weak self] in
+            Task { @MainActor in await self?.refreshApprovalTracking() }
+        }
+        conversation.onObservedStatusChange = { [weak self] _ in
+            Task { @MainActor in await self?.refreshApprovalTracking() }
+        }
+        speech.onPlaybackStateChange = { [weak self] busy in self?.localBusyChanged(speaking: busy) }
+        // The Combine publishers these replace delivered their current value
+        // on subscription; keep that first configuration.
+        localBusyChanged(sending: conversation.isSending)
+        Task { @MainActor [weak self] in await self?.refreshApprovalTracking() }
+    }
+
+    private func localBusyChanged(sending: Bool? = nil, speaking: Bool? = nil) {
+        let sending = sending ?? conversation.isSending
+        let speaking = speaking ?? speech.isBusy
+        voice.configure(conversationBusy: sending || speaking)
+        if !sending && !speaking { voice.responseFinished() }
     }
 
     private func refreshApprovalTracking() async {
@@ -121,26 +138,6 @@ final class AppModel: ObservableObject {
     }
 
     private let camera: CameraCaptureService
-
-    /// Every client is separately observable, but every view observes the
-    /// model. Forwarding each child's change publisher keeps one observation
-    /// point without rebuilding the tree from a dozen @ObservedObjects.
-    private var forwardCancellables: [AnyCancellable] = []
-
-    private func forwardChangePublishers() {
-        // Each child is generic-forwarded: an ObservableObject's publisher is
-        // an associated type, so it cannot be reached through `any`.
-        forChild(settings); forChild(sensors); forChild(pairing); forChild(feed)
-        forChild(presentation); forChild(invitations); forChild(privateRoom)
-        forChild(echo); forChild(voice); forChild(visual)
-        forChild(approvals); forChild(body); forChild(conversation); forChild(surfaceDelivery); forChild(systems)
-    }
-
-    private func forChild<_Source: ObservableObject>(_ source: _Source) {
-        forwardCancellables.append(source.objectWillChange.sink { [weak self] _ in
-            self?.objectWillChange.send()
-        })
-    }
 
     func wireVoiceCallbacks() {
         voice.onCommand = { [weak self] command in
@@ -225,7 +222,10 @@ final class AppModel: ObservableObject {
         ringTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
-                self.ring = self.currentRingState()
+                let now = Date()
+                self.clock = now
+                let ring = self.currentRingState(now: now)
+                if ring != self.ring { self.ring = ring }
                 // A screensavered stage is not a usable display surface; the
                 // delivery presence and claim paths must report that honestly.
                 updateSurfaceVisibility()
@@ -333,16 +333,18 @@ final class AppModel: ObservableObject {
     /// A deliberate touch on the body surface is a contact event: it is
     /// flushed through the sensory frame and then claimed so Kairo can
     /// acknowledge the touch itself.
-    func bodyContactEnded(durationMs: Int, pathLength: Double, cancelled: Bool) {
+    func bodyContactEnded(contactID: String, durationMs: Int, pathLength: Double, cancelled: Bool) {
         let intent = ContactIntent.classify(durationMs: durationMs, pathLength: pathLength, cancelled: cancelled)
         guard ContactIntent.shouldSubmit(isBodySurface: destination == .stage, cancelled: cancelled,
                                          conversationBusy: conversation.isSending || speech.isBusy),
-              let endpointID = body.serverEndpointID else { return }
-        contactCounter += 1
-        let contactID = "ipad:\(body.sessionID):\(contactCounter)"
+              !contactPending, let endpointID = body.serverEndpointID else { return }
         lastContactAt = Date()
+        // One reflex at a time: the server allows one claim per 15 s, so a
+        // second touch while one is in flight stays a sensory observation.
+        contactPending = true
         Task { [weak self] in
             guard let self else { return }
+            defer { self.contactPending = false }
             guard await self.body.flushContact() else { return }
             guard let session = try? await self.conversation.prepareVisualSession() else { return }
             do {
@@ -356,6 +358,16 @@ final class AppModel: ObservableObject {
     }
 
     private var generationToken: Int { conversation.currentGeneration }
+
+    /// The id a stage touch carries in the sensory frame. The reflex claim
+    /// must name this same id: the server consumes only a contact it observed
+    /// ending. A per-launch prefix keeps ids unique when the stage remounts.
+    func nextContactID() -> String {
+        contactCounter += 1
+        return "stage-\(contactPrefix)-\(contactCounter)"
+    }
+
+    private let contactPrefix = String(UUID().uuidString.prefix(8)).lowercased()
 
     // MARK: - Presentation apply on the stage
 

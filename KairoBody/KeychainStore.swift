@@ -20,10 +20,40 @@ enum KeychainStore {
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
         var result: AnyObject?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
-              let data = result as? Data,
-              let value = String(data: data, encoding: .utf8) else { return nil }
-        return value
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        let key = cacheKey(service, account)
+        switch status {
+        case errSecSuccess:
+            guard let data = result as? Data, let value = String(data: data, encoding: .utf8) else { return nil }
+            remember(value, key)
+            return value
+        case errSecItemNotFound:
+            remember(nil, key)
+            return nil
+        default:
+            // A locked device (errSecInteractionNotAllowed) or a transient
+            // Keychain failure is not an absent credential. Answer with the
+            // value last read so callers never mistake it for a revocation.
+            cacheLock.lock(); defer { cacheLock.unlock() }
+            return cache[key]
+        }
+    }
+
+    /// Removes an item; the only path besides an empty `set` that forgets it.
+    static func delete(service: String, account: String) {
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                                    kSecAttrService as String: service,
+                                    kSecAttrAccount as String: account]
+        SecItemDelete(query as CFDictionary)
+        remember(nil, cacheKey(service, account))
+    }
+
+    private static var cache: [String: String] = [:]
+    private static let cacheLock = NSLock()
+    private static func cacheKey(_ service: String, _ account: String) -> String { service + "\u{1F}" + account }
+    private static func remember(_ value: String?, _ key: String) {
+        cacheLock.lock(); defer { cacheLock.unlock() }
+        cache[key] = value
     }
 
     /// Writes without ever replacing an existing item with an empty value.
@@ -39,6 +69,7 @@ enum KeychainStore {
                                       kSecAttrService as String: service,
                                       kSecAttrAccount as String: account]
             _ = operations.delete(query)
+            remember(nil, cacheKey(service, account))
         } else {
             try? setChecked(value, service: service, account: account, operations: operations)
         }
@@ -59,6 +90,7 @@ enum KeychainStore {
             status = operations.add(add)
         }
         guard status == errSecSuccess else { throw KeychainError.writeFailed }
+        remember(value, cacheKey(service, account))
     }
 }
 

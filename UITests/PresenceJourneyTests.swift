@@ -38,9 +38,13 @@ final class PresenceJourneyTests: XCTestCase {
         app.buttons["Conversation"].tap()
         XCTAssertTrue(app.staticTexts["Conversations"].waitForExistence(timeout: 5))
         capture("Conversation-portrait")
+        app.buttons["Systems"].tap()
+        XCTAssertTrue(app.buttons["Close systems"].waitForExistence(timeout: 5))
+        capture("Systems-panel")
         app.buttons["Private"].tap()
         XCTAssertTrue(app.staticTexts["Private room"].waitForExistence(timeout: 5))
         capture("Private-room")
+        app.buttons["Systems"].tap()
         app.buttons["Settings"].tap()
         let transcriptSwitch = app.switches["Show the shared conversation"]
         XCTAssertTrue(transcriptSwitch.waitForExistence(timeout: 5))
@@ -54,6 +58,7 @@ final class PresenceJourneyTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "sharedConversationHidden").firstMatch.waitForExistence(timeout: 5))
         capture("Presence-private-preview")
         app.buttons["Close systems"].tap()
+        app.buttons["Systems"].tap()
         app.buttons["Settings"].tap()
         if transcriptSwitch.value as? String == "0" {
             transcriptSwitch.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()

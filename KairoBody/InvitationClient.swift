@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 struct BodyInvitation {
     let id: String
@@ -13,9 +14,10 @@ struct BodyInvitation {
 /// Kairo source; every outcome (delivered/answered/dismissed/expired/cancelled)
 /// is reported so the server's cadence and quiet guards stay honest.
 @MainActor
-final class InvitationClient: ObservableObject {
-    @Published private(set) var invitation: BodyInvitation?
-    @Published private(set) var canRespond = false
+@Observable
+final class InvitationClient {
+    private(set) var invitation: BodyInvitation?
+    private(set) var canRespond = false
     typealias Request = (String, String, [String: Any]?) async throws -> [String: Any]
     private let request: Request
     private let ownerProof: () -> String

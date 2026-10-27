@@ -6,7 +6,7 @@ import PhotosUI
 /// Dot's own conversation when Echo following is on. The Dot can then talk
 /// about what the iPad saw.
 struct LookTogetherView: View {
-    @EnvironmentObject private var model: AppModel
+    @Environment(AppModel.self) private var model
     @State private var selectedItem: PhotosPickerItem?
     @State private var busy = false
     @State private var question = ""
@@ -25,7 +25,7 @@ struct LookTogetherView: View {
                              ? "Shared front-camera photo" : "Explicitly selected image")
                             .font(.caption).foregroundStyle(KairoTheme.chrome)
                         if let time = model.visual.observedAt {
-                            Text("Shared at \(time.formatted())").font(.caption2).foregroundStyle(KairoTheme.faint)
+                            Text("Shared at \(time.formatted())").font(.footnote).foregroundStyle(KairoTheme.faint)
                         }
                     } else {
                         Text("Choose one image to discuss with Kairo.")
@@ -101,7 +101,7 @@ struct LookTogetherView: View {
             }
             .frame(maxWidth: 1000)
             .padding(.horizontal, 24)
-            .padding(.bottom, 96)
+            .padding(.bottom, 108)
             .frame(maxWidth: .infinity)
         }
         .background(KairoTheme.background)

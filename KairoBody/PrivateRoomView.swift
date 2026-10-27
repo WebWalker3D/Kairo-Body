@@ -5,12 +5,12 @@ import SwiftUI
 /// shared transcript, and every memory proposal waits for an explicit Keep or
 /// Dismiss on this device.
 struct PrivateRoomView: View {
-    @EnvironmentObject private var model: AppModel
+    @Environment(AppModel.self) private var model
     @Environment(\.scenePhase) private var scenePhase
     @State private var code = ""
     @State private var draft = PrivateMessageDraft()
     @State private var confirmWake = false
-    @StateObject private var sleepWake = SleepWakeControl()
+    @State private var sleepWake = SleepWakeControl()
 
     var body: some View {
         ScrollView {
@@ -29,7 +29,7 @@ struct PrivateRoomView: View {
             }
             .frame(maxWidth: 1000)
             .padding(.horizontal, 24)
-            .padding(.bottom, 96)
+            .padding(.bottom, 108)
             .frame(maxWidth: .infinity)
         }
         .background(KairoTheme.background)
@@ -184,7 +184,7 @@ struct PrivateRoomView: View {
                 .font(.system(size: 14, design: .rounded))
                 .foregroundStyle(KairoTheme.prose)
             Text("Expires \(proposal.expiresAt.formatted())")
-                .font(.caption2).foregroundStyle(KairoTheme.faint)
+                .font(.footnote).foregroundStyle(KairoTheme.faint)
             HStack(spacing: 12) {
                 Button {
                     Task { await model.privateRoom.decideMemory("keep") }

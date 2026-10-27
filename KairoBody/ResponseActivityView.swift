@@ -3,7 +3,7 @@ import SwiftUI
 /// The stage's read-only view of work across Kairo, plus this device's durable
 /// submission status. Observing an answer here never claims delivery or speaks it.
 struct ResponseActivityView: View {
-    @EnvironmentObject private var model: AppModel
+    @Environment(AppModel.self) private var model
     var showShared = true
     @State private var confirmForget = false
 
@@ -16,7 +16,7 @@ struct ResponseActivityView: View {
     }
     private var dotActivity: DotActivity? {
         guard showShared, sharedTurn?.active != true, let activity = model.echo.state.activity,
-              activity.expiresAt > Date(), ["thinking", "listening", "speaking"].contains(activity.phase) else { return nil }
+              activity.expiresAt > model.clock, ["thinking", "listening", "speaking"].contains(activity.phase) else { return nil }
         return activity
     }
     private var dotDetail: String {
@@ -27,7 +27,7 @@ struct ResponseActivityView: View {
     private var localNeedsApproval: Bool { model.conversation.observedStatus == "waiting_permission" }
     private var feedFresh: Bool {
         model.feed.following && model.feed.connectionTrouble == nil &&
-        model.feed.lastUpdatedAt.map { Date().timeIntervalSince($0) < 30 } == true
+        model.feed.lastUpdatedAt.map { model.clock.timeIntervalSince($0) < 30 } == true
     }
 
     var body: some View {
@@ -139,7 +139,7 @@ struct ResponseActivityView: View {
                     }
                 }
             }
-            Text(source).font(.system(size: 9, design: .monospaced)).tracking(1)
+            Text(source).font(.system(size: 12, design: .monospaced)).tracking(1)
                 .foregroundStyle(KairoTheme.chrome).lineLimit(1)
             Text(detail).font(.caption).foregroundStyle(blocked ? KairoTheme.warn : KairoTheme.chrome)
                 .fixedSize(horizontal: false, vertical: true).lineLimit(3)

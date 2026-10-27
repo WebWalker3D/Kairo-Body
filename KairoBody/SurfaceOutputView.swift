@@ -3,7 +3,7 @@ import SwiftUI
 /// A root-level surface so a claimed answer is visible on every destination.
 /// Its mounted content acknowledges display; merely setting model text does not.
 struct SurfaceOutputView: View {
-    @EnvironmentObject private var model: AppModel
+    @Environment(AppModel.self) private var model
     let text: String
 
     var body: some View {

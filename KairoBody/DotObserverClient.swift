@@ -1,13 +1,20 @@
 import Foundation
+import Observation
 
 /// An Agent-authenticated observer of the existing ephemeral body relay. It
 /// advertises no actuators; the sensory socket remains the only body endpoint.
 /// This link is what lets the iPad see and answer the Dot's live state.
 @MainActor
-final class DotObserverClient: ObservableObject {
-    @Published private(set) var state = DotActivityState()
-    @Published private(set) var connected = false
-    @Published private(set) var notice = "Dot link disconnected"
+@Observable
+final class DotObserverClient {
+    private(set) var state = DotActivityState() {
+        didSet {
+            if oldValue.activity?.phase != state.activity?.phase { onPhaseChange?(state.activity?.phase) }
+        }
+    }
+    var onPhaseChange: ((String?) -> Void)?
+    private(set) var connected = false
+    private(set) var notice = "Dot link disconnected"
 
     private var socket: URLSessionWebSocketTask?
     private var followedToken: String?
@@ -35,7 +42,12 @@ final class DotObserverClient: ObservableObject {
             while !Task.isCancelled {
                 guard let self, current == self.generation else { return }
                 guard let url = URL(string: AppConfig.dotObserverURL) else { return }
-                let task = session.webSocketTask(with: url, protocols: ["novexai", token])
+                // The bearer rides in Authorization, not in the subprotocol
+                // list: Sec-WebSocket-Protocol is echoed and commonly logged.
+                var request = URLRequest(url: url)
+                request.setValue("novexai", forHTTPHeaderField: "Sec-WebSocket-Protocol")
+                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                let task = session.webSocketTask(with: request)
                 self.socket = task
                 task.resume()
                 do {

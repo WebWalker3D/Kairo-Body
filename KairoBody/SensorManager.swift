@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import CoreMotion
 import CoreLocation
 import Network
@@ -6,8 +7,9 @@ import UIKit
 import AVFoundation
 
 @MainActor
-final class SensorManager: NSObject, ObservableObject, CLLocationManagerDelegate {
-    @Published private(set) var liveSummary = "Sensors stopped"
+@Observable
+final class SensorManager: NSObject, CLLocationManagerDelegate {
+    private(set) var liveSummary = "Sensors stopped"
     var onSignificantMovement: (() -> Void)?
     var onPermissionsChanged: (() -> Void)?
 
@@ -15,7 +17,7 @@ final class SensorManager: NSObject, ObservableObject, CLLocationManagerDelegate
     private let altimeter = CMAltimeter()
     private let location = CLLocationManager()
     private var locationEnabled = false
-    lazy var locationAttention = LocationAttention(request: { [weak self] in
+    @ObservationIgnored lazy var locationAttention = LocationAttention(request: { [weak self] in
         self?.location.requestLocation()
     }, cancelRequest: { [weak self] in
         // Ordinary foreground sensing continues independently of this one-shot request.

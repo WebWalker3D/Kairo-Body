@@ -12,6 +12,11 @@ struct HTTPStatusError: Error, Equatable {
 /// A 2xx answer whose body was not the expected JSON shape.
 struct MalformedResponse: Error, Equatable {}
 
+/// No credential could be read on this device, so no request was sent. The
+/// server never answered, so this is never a revocation: it keeps what is on
+/// screen and retries, and only a real 401/403 may clear owner content.
+struct CredentialUnavailable: Error, Equatable {}
+
 /// How a failed request should be treated. Only `authorizationLost` may erase
 /// owner-private content; `transient` keeps what is on screen and retries.
 enum RequestFailureKind: Equatable {
@@ -33,6 +38,7 @@ enum RequestFailure {
         if error is SubmissionUnconfirmed { return .transient }
         if let status = error as? HTTPStatusError { return kind(status: status.status) }
         if error is MalformedResponse { return .transient }
+        if error is CredentialUnavailable { return .transient }
         if let url = error as? URLError {
             switch url.code {
             case .userAuthenticationRequired: return .authorizationLost

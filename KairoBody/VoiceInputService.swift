@@ -1,4 +1,5 @@
 import AVFoundation
+import Observation
 import Foundation
 import Speech
 
@@ -34,12 +35,13 @@ private final class SpeechBufferRelay {
 /// Foreground wake-phrase capture. Only recognized text is sent to Kairo's
 /// existing conversation; raw audio never leaves the device.
 @MainActor
-final class VoiceInputService: ObservableObject {
-    @Published private(set) var status = "Voice wake off"
-    @Published private(set) var heardText = ""
-    @Published private(set) var lastCommand = ""
-    @Published private(set) var error: String?
-    @Published private(set) var isCapturing = false
+@Observable
+final class VoiceInputService {
+    private(set) var status = "Voice wake off"
+    private(set) var heardText = ""
+    private(set) var lastCommand = ""
+    private(set) var error: String?
+    private(set) var isCapturing = false
 
     var onWake: (() -> Void)?
     var onCommand: ((String) -> Void)?

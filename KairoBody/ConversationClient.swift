@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import UIKit
 import CryptoKit
 
@@ -28,6 +29,10 @@ extension HTTPStatusError: LocalizedError {
     }
 }
 
+extension CredentialUnavailable: LocalizedError {
+    var errorDescription: String? { "This iPad could not read its Kairo credential right now. Retrying." }
+}
+
 extension MalformedResponse: LocalizedError {
     var errorDescription: String? { "Kairo sent an invalid conversation response." }
 }
@@ -38,7 +43,8 @@ extension MalformedResponse: LocalizedError {
 /// the same conversation Kairo is holding with the Dot, and the answer comes
 /// back into this transcript.
 @MainActor
-final class ConversationClient: ObservableObject {
+@Observable
+final class ConversationClient {
     enum OutputDestination: String, CaseIterable, Identifiable {
         case automatic = "Kairo decides"
         case silent = "Silent"
@@ -60,18 +66,26 @@ final class ConversationClient: ObservableObject {
         case stillWorking(jobID: String)
     }
 
-    @Published private(set) var reply = ""
-    @Published private(set) var error: String?
-    @Published private(set) var status = ""
-    @Published private(set) var isSending = false
-    @Published private(set) var promptProgress: PromptTokenProgress?
-    @Published private(set) var pendingRecovery: PendingRecovery?
-    @Published private(set) var submittedText = ""
-    @Published private(set) var submittedAt: Date?
-    @Published private(set) var lastObservedAt: Date?
-    @Published private(set) var observedStatus = ""
-    @Published var draft = ""
-    @Published var outputDestination: OutputDestination = .automatic
+    private(set) var reply = ""
+    private(set) var error: String?
+    private(set) var status = ""
+    private(set) var isSending = false {
+        didSet { if oldValue != isSending { onSendingChange?(isSending) } }
+    }
+    private(set) var promptProgress: PromptTokenProgress?
+    private(set) var pendingRecovery: PendingRecovery?
+    private(set) var submittedText = ""
+    private(set) var submittedAt: Date?
+    private(set) var lastObservedAt: Date?
+    private(set) var observedStatus = "" {
+        didSet { if oldValue != observedStatus { onObservedStatusChange?(observedStatus) } }
+    }
+    /// Change hooks for the composition root; they replace the Combine
+    /// publishers the ObservableObject version exposed.
+    var onSendingChange: ((Bool) -> Void)?
+    var onObservedStatusChange: ((String) -> Void)?
+    var draft = ""
+    var outputDestination: OutputDestination = .automatic
 
     /// The composition root wires these to the surface-delivery client so a
     /// settled answer routed to this iPad is claimed and applied atomically.

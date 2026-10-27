@@ -34,6 +34,9 @@ struct KairoRingMetalView: UIViewRepresentable {
     var framesPerSecond: Int = 30
     var reduceMotion = false
     var contact: CGPoint? = nil
+    /// A covered or sleeping surface draws nothing: the stage stays mounted
+    /// under the screensaver, and an unseen 24,000-point field is pure heat.
+    var paused = false
 
     func makeCoordinator() -> Renderer { Renderer() }
 
@@ -57,10 +60,14 @@ struct KairoRingMetalView: UIViewRepresentable {
 
     func updateUIView(_ view: MTKView, context: Context) {
         view.preferredFramesPerSecond = framesPerSecond
+        view.isPaused = paused
         context.coordinator.reducedMotion = reduceMotion
+        // On release only the strength fades; the ripple stays where the
+        // finger lifted instead of sliding toward the centre.
+        let previous = context.coordinator.contactTarget
         context.coordinator.contactTarget = contact.map {
             SIMD4<Float>(Float($0.x * 2 - 1), Float(1 - $0.y * 2), 1, 0)
-        } ?? SIMD4<Float>(0, 0, 0, 0)
+        } ?? SIMD4<Float>(previous.x, previous.y, 0, 0)
         context.coordinator.apply(state, size: view.bounds.size)
     }
 

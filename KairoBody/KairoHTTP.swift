@@ -59,7 +59,7 @@ final class KairoHTTP {
         var request = URLRequest(url: url)
         request.timeoutInterval = 12
         let token = credentials().agent
-        guard !token.isEmpty else { throw HTTPStatusError(status: 401) }
+        guard !token.isEmpty else { throw CredentialUnavailable() }
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let proof = credentials().owner
         if !proof.isEmpty { request.setValue(proof, forHTTPHeaderField: "X-Kairo-Device") }
@@ -91,7 +91,7 @@ final class KairoHTTP {
         var request = URLRequest(url: base)
         request.httpMethod = "POST"
         let token = AppConfig.sensoryToken
-        guard !token.isEmpty else { throw HTTPStatusError(status: 401) }
+        guard !token.isEmpty else { throw CredentialUnavailable() }
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -116,7 +116,7 @@ final class KairoHTTP {
         var request = URLRequest(url: url)
         request.httpMethod = method
         let token = credentials().agent
-        guard !token.isEmpty else { throw HTTPStatusError(status: 401) }
+        guard !token.isEmpty else { throw CredentialUnavailable() }
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         if let accept { request.setValue(accept, forHTTPHeaderField: "Accept") }
         if let body {
@@ -142,7 +142,7 @@ final class KairoHTTP {
         switch credential {
         case .agent:
             let token = credentials().agent
-            guard !token.isEmpty else { throw HTTPStatusError(status: 401) }
+            guard !token.isEmpty else { throw CredentialUnavailable() }
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             // Owner-scoped routes read this header as the pairing proof; the
             // Agent bearer alone gets a different (public) scope.
@@ -150,7 +150,7 @@ final class KairoHTTP {
             if !owner.isEmpty { request.setValue(owner, forHTTPHeaderField: "X-Kairo-Device") }
         case .sensory:
             let token = AppConfig.sensoryToken
-            guard !token.isEmpty else { throw HTTPStatusError(status: 401) }
+            guard !token.isEmpty else { throw CredentialUnavailable() }
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         if let body {

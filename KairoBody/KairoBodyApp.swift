@@ -2,13 +2,13 @@ import SwiftUI
 
 @main
 struct KairoBodyApp: App {
-    @StateObject private var model = AppModel()
+    @State private var model = AppModel()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
             RootShellView()
-                .environmentObject(model)
+                .environment(model)
                 .preferredColorScheme(.dark)
                 .task {
                     model.wireVoiceCallbacks()

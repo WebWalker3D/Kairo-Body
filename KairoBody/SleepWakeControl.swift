@@ -1,12 +1,14 @@
 import Foundation
+import Observation
 
 /// A deliberate paired-owner control, independent of conversations and inference.
 /// Retain an unconfirmed request's id across launches; only a matching completed
 /// receipt permits a new request. No automatic retry or credential storage here.
 @MainActor
-final class SleepWakeControl: ObservableObject {
-    @Published private(set) var busy = false
-    @Published private(set) var message = ""
+@Observable
+final class SleepWakeControl {
+    private(set) var busy = false
+    private(set) var message = ""
     private let defaults: UserDefaults
     private let paired: @MainActor () -> Bool
     private let request: (String, String, [String: Any]) async throws -> [String: Any]

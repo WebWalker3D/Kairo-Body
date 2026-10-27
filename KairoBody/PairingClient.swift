@@ -1,11 +1,13 @@
 import Foundation
+import Observation
 
 /// Pairing: the six-digit code for this exact iPad endpoint redeems once for a
 /// durable owner proof. The code is endpoint-scoped and single-use; the proof
 /// is what authorizes private sessions, the shared transcript, presentation
 /// and surface delivery. The sensory bearer never carries owner scope itself.
 @MainActor
-final class PairingClient: ObservableObject {
+@Observable
+final class PairingClient {
     enum State: Equatable {
         case unpaired
         case pairing
@@ -22,7 +24,7 @@ final class PairingClient: ObservableObject {
         }
     }
 
-    @Published private(set) var state: State
+    private(set) var state: State
     private var redeemTask: Task<Void, Never>?
     /// Bumped whenever an attempt is replaced or forgotten, so a late network
     /// result from the old attempt can never overwrite the current state.

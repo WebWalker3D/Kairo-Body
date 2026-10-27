@@ -3,11 +3,11 @@ import SwiftUI
 /// Composes the existing, owner-filtered signals. This view performs no reads
 /// or writes of its own: the single AppModel lifecycle owns every connection.
 struct PresenceWorkspace: View {
-    @EnvironmentObject private var model: AppModel
+    @Environment(AppModel.self) private var model
 
     private var feedFresh: Bool {
         model.feed.following && model.feed.connectionTrouble == nil &&
-        model.feed.lastUpdatedAt.map { Date().timeIntervalSince($0) < 60 } == true
+        model.feed.lastUpdatedAt.map { model.clock.timeIntervalSince($0) < 60 } == true
     }
 
     var body: some View {
@@ -38,7 +38,7 @@ struct PresenceWorkspace: View {
                             .lineLimit(2)
                     }
                     Text("Committed state · last received")
-                        .font(.caption2).foregroundStyle(KairoTheme.faint)
+                        .font(.footnote).foregroundStyle(KairoTheme.faint)
                 }
             }
             HStack(spacing: 10) {
@@ -67,11 +67,11 @@ struct PresenceWorkspace: View {
                     Spacer()
                     Text(PresencePreviewPolicy.isWorking(active: turn.active, feedFresh: feedFresh) ? "WORKING" : "LAST RECEIVED")
                 }
-                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
                 .foregroundStyle(KairoTheme.chrome)
                 if let tool = turn.toolActivity.last, turn.active, feedFresh {
                     Label(tool, systemImage: "bolt.horizontal")
-                        .font(.caption2).foregroundStyle(KairoTheme.mind).lineLimit(2)
+                        .font(.footnote).foregroundStyle(KairoTheme.mind).lineLimit(2)
                 }
             } else {
                 Text("Your shared conversation")
@@ -84,7 +84,7 @@ struct PresenceWorkspace: View {
             }
             if let trouble = model.feed.connectionTrouble {
                 Label(trouble, systemImage: "wifi.exclamationmark")
-                    .font(.caption2).foregroundStyle(KairoTheme.warn).lineLimit(2)
+                    .font(.footnote).foregroundStyle(KairoTheme.warn).lineLimit(2)
             }
             Button {
                 model.destination = .conversation
@@ -111,7 +111,7 @@ struct PresenceWorkspace: View {
             connection("Continuity", detail: feedFresh ? "Shared conversation feed" : "Feed unavailable", online: feedFresh, icon: "circle.hexagongrid", color: KairoTheme.mind)
             Button { model.destination = .bodySurface } label: {
                 HStack { Text("Explore this body"); Spacer(); Image(systemName: "arrow.up.right") }
-                    .font(.system(size: 11)).foregroundStyle(KairoTheme.chrome)
+                    .font(.system(size: 14)).foregroundStyle(KairoTheme.chrome)
             }.buttonStyle(.plain)
         }
         .padding(20)
@@ -126,7 +126,7 @@ struct PresenceWorkspace: View {
                 .background(color.opacity(0.08), in: RoundedRectangle(cornerRadius: 9))
             VStack(alignment: .leading, spacing: 3) {
                 Text(name).font(.system(size: 12, weight: .medium)).foregroundStyle(KairoTheme.dim)
-                Text(detail).font(.system(size: 10)).foregroundStyle(KairoTheme.faint)
+                Text(detail).font(.system(size: 13)).foregroundStyle(KairoTheme.faint)
             }
             Spacer()
             Circle().fill(online ? color : KairoTheme.faint.opacity(0.4)).frame(width: 5, height: 5)
@@ -138,7 +138,7 @@ struct PresenceWorkspace: View {
             VStack(alignment: .leading, spacing: 10) {
                 Image(systemName: icon).font(.system(size: 21, weight: .light)).foregroundStyle(color)
                 Text(title).font(.system(size: 12, weight: .medium)).foregroundStyle(KairoTheme.prose)
-                Text(detail).font(.system(size: 10)).foregroundStyle(KairoTheme.faint)
+                Text(detail).font(.system(size: 13)).foregroundStyle(KairoTheme.faint)
             }
             .frame(maxWidth: .infinity, alignment: .leading).padding(17)
             .background(color.opacity(0.045), in: RoundedRectangle(cornerRadius: 20))

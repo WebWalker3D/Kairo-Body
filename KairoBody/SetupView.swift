@@ -5,7 +5,7 @@ import SwiftUI
 /// replacement inherits the Keychain tokens, the owner pairing proof and the
 /// stored Echo session id and never sees this sheet.
 struct SetupView: View {
-    @EnvironmentObject private var model: AppModel
+    @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var agent = ""
     @State private var sensory = ""

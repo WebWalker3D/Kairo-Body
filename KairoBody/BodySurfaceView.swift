@@ -6,7 +6,7 @@ import CoreLocation
 /// Diagnostics only — the point is that Kairo can see what the body is doing
 /// and what it is allowed to do, separately.
 struct BodySurfaceView: View {
-    @EnvironmentObject private var model: AppModel
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         ScrollView {
@@ -37,7 +37,7 @@ struct BodySurfaceView: View {
             }
             .frame(maxWidth: 1000)
             .padding(.horizontal, 24)
-            .padding(.bottom, 96)
+            .padding(.bottom, 108)
             .frame(maxWidth: .infinity)
         }
         .background(KairoTheme.background)

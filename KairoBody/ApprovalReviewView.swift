@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ApprovalReviewView: View {
-    @EnvironmentObject private var model: AppModel
+    @Environment(AppModel.self) private var model
     let jobID: String
     @State private var reviewed: PendingApproval?
     @State private var showingReview = false

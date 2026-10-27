@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 /// One fixed Kairo deployment plus credentials that live in the Keychain.
 /// Public CI builds carry no personal provisioning: tokens and the shared
@@ -65,10 +66,7 @@ enum AppConfig {
     }
 
     static func clearOwnerProof() throws {
-        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
-                                    kSecAttrService as String: ownerService,
-                                    kSecAttrAccount as String: ownerAccount]
-        SecItemDelete(query as CFDictionary)
+        KeychainStore.delete(service: ownerService, account: ownerAccount)
     }
 
     /// The shared conversation session, entered at setup (same UserDefaults
@@ -97,7 +95,8 @@ enum AppConfig {
 
 /// Device-local appliance preferences. Connection, credentials, endpoint and
 /// session identity are deliberately absent: they are fixed by the build.
-final class AppSettings: ObservableObject {
+@Observable
+final class AppSettings {
     private enum Keys {
         static let sendLocation = "sendLocation"
         static let allowRemoteCamera = "allowRemoteCamera"
@@ -112,19 +111,19 @@ final class AppSettings: ObservableObject {
         static let sharedSessionID = "sharedSessionID"
     }
 
-    @Published var sendLocation: Bool { didSet { defaults.set(sendLocation, forKey: Keys.sendLocation) } }
-    @Published var allowRemoteCamera: Bool { didSet { defaults.set(allowRemoteCamera, forKey: Keys.allowRemoteCamera) } }
-    @Published var cameraMode: Bool { didSet { defaults.set(cameraMode, forKey: Keys.cameraMode) } }
-    @Published var keepAwake: Bool { didSet { defaults.set(keepAwake, forKey: Keys.keepAwake) } }
-    @Published var dimWhenStill: Bool { didSet { defaults.set(dimWhenStill, forKey: Keys.dimWhenStill) } }
-    @Published var screensaverMinutes: Int { didSet { defaults.set(screensaverMinutes, forKey: Keys.screensaverMinutes) } }
-    @Published var followEcho: Bool { didSet { defaults.set(followEcho, forKey: Keys.followEcho) } }
-    @Published var invitationsEnabled: Bool { didSet { defaults.set(invitationsEnabled, forKey: Keys.invitationsEnabled) } }
-    @Published var voiceWakeEnabled: Bool { didSet { defaults.set(voiceWakeEnabled, forKey: Keys.voiceWakeEnabled) } }
-    @Published var echoTranscriptVisible: Bool { didSet { defaults.set(echoTranscriptVisible, forKey: Keys.echoTranscriptVisible) } }
+    var sendLocation: Bool { didSet { defaults.set(sendLocation, forKey: Keys.sendLocation) } }
+    var allowRemoteCamera: Bool { didSet { defaults.set(allowRemoteCamera, forKey: Keys.allowRemoteCamera) } }
+    var cameraMode: Bool { didSet { defaults.set(cameraMode, forKey: Keys.cameraMode) } }
+    var keepAwake: Bool { didSet { defaults.set(keepAwake, forKey: Keys.keepAwake) } }
+    var dimWhenStill: Bool { didSet { defaults.set(dimWhenStill, forKey: Keys.dimWhenStill) } }
+    var screensaverMinutes: Int { didSet { defaults.set(screensaverMinutes, forKey: Keys.screensaverMinutes) } }
+    var followEcho: Bool { didSet { defaults.set(followEcho, forKey: Keys.followEcho) } }
+    var invitationsEnabled: Bool { didSet { defaults.set(invitationsEnabled, forKey: Keys.invitationsEnabled) } }
+    var voiceWakeEnabled: Bool { didSet { defaults.set(voiceWakeEnabled, forKey: Keys.voiceWakeEnabled) } }
+    var echoTranscriptVisible: Bool { didSet { defaults.set(echoTranscriptVisible, forKey: Keys.echoTranscriptVisible) } }
     /// The iPad's own shared conversation session. It is created once and
     /// reused; the Dot's configured session is never written from here.
-    @Published var sharedSessionID: String { didSet { defaults.set(sharedSessionID, forKey: Keys.sharedSessionID) } }
+    var sharedSessionID: String { didSet { defaults.set(sharedSessionID, forKey: Keys.sharedSessionID) } }
 
     private let defaults: UserDefaults
 
