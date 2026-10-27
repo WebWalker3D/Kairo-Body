@@ -257,6 +257,7 @@ final class SensorManager: NSObject, CLLocationManagerDelegate {
     }
 
     func recordTouchBegan(id: String, x: Double, y: Double) {
+        let (x, y) = Self.onSurface(x, y)
         lock.lock()
         touchStart[id] = Date()
         touchPositions[id] = (x, y)
@@ -269,6 +270,7 @@ final class SensorManager: NSObject, CLLocationManagerDelegate {
     }
 
     func recordTouchMoved(id: String, x: Double, y: Double) {
+        let (x, y) = Self.onSurface(x, y)
         lock.lock()
         if let previous = touchPositions[id] {
             touchPathSinceFrame[id, default: 0] += hypot(x - previous.0, y - previous.1)
@@ -279,6 +281,7 @@ final class SensorManager: NSObject, CLLocationManagerDelegate {
     }
 
     func recordTouchEnded(id: String, x: Double, y: Double) {
+        let (x, y) = Self.onSurface(x, y)
         lock.lock()
         let start = touchStart.removeValue(forKey: id)
         let duration = start.map { Int(Date().timeIntervalSince($0) * 1000) }
@@ -297,6 +300,13 @@ final class SensorManager: NSObject, CLLocationManagerDelegate {
                                   pathDeltaNormalized: nil))
         trimTouches()
         lock.unlock()
+    }
+
+    /// A drag keeps reporting after it leaves the ring, but the server accepts
+    /// only 0...1 and rejects the whole frame otherwise. Pin the finger to the
+    /// surface edge so a stroke that runs off the ring still arrives.
+    nonisolated static func onSurface(_ x: Double, _ y: Double) -> (Double, Double) {
+        (min(max(x.isFinite ? x : 0.5, 0), 1), min(max(y.isFinite ? y : 0.5, 0), 1))
     }
 
     private func trimTouches() {

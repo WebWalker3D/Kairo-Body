@@ -40,3 +40,12 @@ final class ContactIdentityTests: XCTestCase {
         }
     }
 }
+
+final class TouchSurfaceTests: XCTestCase {
+    func testStrokesOffTheRingArePinnedToTheSurface() {
+        XCTAssertEqual(SensorManager.onSurface(-0.2, 1.4).0, 0)
+        XCTAssertEqual(SensorManager.onSurface(-0.2, 1.4).1, 1)
+        XCTAssertEqual(SensorManager.onSurface(0.25, 0.75).0, 0.25)
+        XCTAssertEqual(SensorManager.onSurface(.nan, .infinity).0, 0.5)
+    }
+}
