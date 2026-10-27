@@ -44,7 +44,9 @@ struct KairoRingMetalView: UIViewRepresentable {
         view.isOpaque = false
         view.backgroundColor = .clear
         view.clearColor = MTLClearColorMake(0, 0, 0, 0)
-        view.colorPixelFormat = .bgra8Unorm
+        // Blend light in linear space, then encode for the display. Treating
+        // linear shader values as sRGB made the field unnaturally dark.
+        view.colorPixelFormat = .bgra8Unorm_srgb
         view.preferredFramesPerSecond = framesPerSecond
         view.enableSetNeedsDisplay = false
         view.isPaused = false

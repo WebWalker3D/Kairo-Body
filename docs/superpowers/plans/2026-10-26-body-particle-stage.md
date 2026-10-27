@@ -41,3 +41,8 @@ approval gate. The prior visual direction is superseded, not its safety fixes.
 - Ruling: no server deployment or production inference needed; existing public
   app surface protocol supports ipad_display. Physical iPad performance and
   replacement-install acceptance remain hardware checks.
+
+- Visual inspection of simulator portrait, landscape and keyboard captures:
+  layout fits; lighting was too subdued. Use sRGB render targets so additive
+  blending remains linear and display encoding is correct. GPU sleep-energy
+  assertion decodes sRGB before comparing energy. ABI and geometry unchanged.

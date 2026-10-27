@@ -15,7 +15,7 @@ final class ParticleRenderTests: XCTestCase {
         descriptor.vertexFunction = try XCTUnwrap(library.makeFunction(name: "kairoParticleVertex"))
         descriptor.fragmentFunction = try XCTUnwrap(library.makeFunction(name: "kairoParticleFragment"))
         let colour = descriptor.colorAttachments[0]!
-        colour.pixelFormat = .rgba8Unorm
+        colour.pixelFormat = .rgba8Unorm_srgb
         colour.isBlendingEnabled = true
         colour.sourceRGBBlendFactor = .one
         colour.destinationRGBBlendFactor = .one
@@ -25,7 +25,7 @@ final class ParticleRenderTests: XCTestCase {
         let queue = try XCTUnwrap(device.makeCommandQueue())
         let size = 640
         func render(time: Float, touch: SIMD4<Float> = .zero, sleeping: Bool = false) throws -> [UInt8] {
-            let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba8Unorm,
+            let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba8Unorm_srgb,
                 width: size, height: size, mipmapped: false)
             desc.usage = [.renderTarget]
             desc.storageMode = .shared
@@ -69,8 +69,8 @@ final class ParticleRenderTests: XCTestCase {
         XCTAssertNotEqual(still, moved, "Time must move the particle geometry")
         XCTAssertNotEqual(still, touched, "Touch must deform the field")
         XCTAssertEqual(still, try render(time: 0), "Frozen time must remain stable for Reduce Motion")
-        let light: ([UInt8]) -> Int = { bytes in
-            stride(from: 0, to: bytes.count, by: 4).reduce(0) { $0 + Int(bytes[$1+2]) }
+        let light: ([UInt8]) -> Double = { bytes in
+            stride(from: 0, to: bytes.count, by: 4).reduce(0.0) { $0 + pow(Double(bytes[$1+2]) / 255, 2.2) }
         }
         XCTAssertLessThan(light(sleeping), light(still) / 3)
         for (name, pixels) in [("Particle-field-still", still), ("Particle-field-motion", moved), ("Particle-field-touch", touched)] {
