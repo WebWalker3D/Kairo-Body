@@ -100,27 +100,11 @@ private final class WakeFixtureProtocol: URLProtocol {
 
 extension SleepWakeTests {
     func testRealHTTPAdapterCarriesExistingDeviceProofAndBearer() async throws {
-        let oldToken = AppConfig.agentToken
-        let oldProof = AppConfig.ownerProof
-        defer {
-            AppConfig.agentToken = oldToken
-            if oldProof.isEmpty { try? AppConfig.clearOwnerProof() }
-            else { try? AppConfig.saveOwnerProof(oldProof) }
-            WakeFixtureProtocol.inspect = nil
-        }
-        AppConfig.agentToken = "test-agent-only"
-        do {
-            try AppConfig.saveOwnerProof("test-device-only")
-        } catch {
-            #if targetEnvironment(simulator)
-            throw XCTSkip("This unsigned simulator cannot write Keychain fixtures; paired transport requires signed-device verification.")
-            #else
-            throw error
-            #endif
-        }
+        defer { WakeFixtureProtocol.inspect = nil }
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [WakeFixtureProtocol.self]
-        let http = KairoHTTP(session: URLSession(configuration: config))
+        let http = KairoHTTP(session: URLSession(configuration: config),
+                             credentials: { ("test-agent-only", "test-device-only") })
         var calls = 0
         WakeFixtureProtocol.inspect = { request in
             calls += 1

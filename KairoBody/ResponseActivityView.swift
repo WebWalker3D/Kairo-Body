@@ -5,6 +5,7 @@ import SwiftUI
 struct ResponseActivityView: View {
     @EnvironmentObject private var model: AppModel
     var showShared = true
+    @State private var confirmForget = false
 
     private var localVisible: Bool {
         model.conversation.isSending || model.conversation.pendingRecovery != nil || model.conversation.error != nil
@@ -38,6 +39,9 @@ struct ResponseActivityView: View {
                             Spacer()
                             Button("Stop request") { Task { await model.conversation.stopResponse() } }
                         }.font(.caption.weight(.semibold))
+                        Button("Stop tracking…") { confirmForget = true }
+                            .font(.caption).foregroundStyle(KairoTheme.chrome)
+                            .disabled(model.conversation.isSending)
                     }
                 } else if let turn = sharedTurn {
                     let blocked = turn.status == "waiting_permission" || turn.settledStatus == "failed"
@@ -49,6 +53,9 @@ struct ResponseActivityView: View {
                              source: turn.sourceCaption.uppercased(), active: turn.active && feedFresh && !blocked,
                              blocked: blocked || !feedFresh,
                              since: turn.active ? BodyJSON.date(turn.createdAt) : nil)
+                    if turn.status == "waiting_permission", feedFresh {
+                        ApprovalReviewView(jobID: turn.id)
+                    }
                     Text(turn.answer.isEmpty ? turn.prompt : turn.answer)
                         .font(.system(size: 15)).foregroundStyle(KairoTheme.prose).lineSpacing(3).lineLimit(3)
                     Button {
@@ -66,6 +73,12 @@ struct ResponseActivityView: View {
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22))
             .overlay(RoundedRectangle(cornerRadius: 22).stroke(KairoTheme.hairline))
             .accessibilityIdentifier("responseActivity")
+            .confirmationDialog("Stop tracking this request?", isPresented: $confirmForget, titleVisibility: .visible) {
+                Button("Stop tracking", role: .destructive) { model.conversation.clearRecoveredTurn() }
+                Button("Keep tracking", role: .cancel) {}
+            } message: {
+                Text("This removes local recovery. It does not cancel Kairo's work, which may still finish on another surface.")
+            }
         }
     }
 

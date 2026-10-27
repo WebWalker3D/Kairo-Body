@@ -9,6 +9,7 @@ import UIKit
 /// whole app renders.
 @MainActor
 final class AppModel: ObservableObject {
+    let approvals: ApprovalClient
     let systems = SystemsClient()
     let settings = AppSettings()
     let sensors = SensorManager()
@@ -52,9 +53,10 @@ final class AppModel: ObservableObject {
         var id: String { rawValue }
     }
 
-    init(feed: TranscriptFeedClient? = nil, deliveryRequest: SurfaceDeliveryClient.Request? = nil,
+    init(feed: TranscriptFeedClient? = nil, approvals: ApprovalClient? = nil, deliveryRequest: SurfaceDeliveryClient.Request? = nil,
          surfaceUnobscured: @escaping @MainActor () -> Bool = { SurfaceVisibility.isUnobscured() }) {
         self.feed = feed ?? TranscriptFeedClient()
+        self.approvals = approvals ?? ApprovalClient()
         self.surfaceUnobscured = surfaceUnobscured
         AppConfig.provisionOnFirstLaunch()
         let http = KairoHTTP()
@@ -88,6 +90,14 @@ final class AppModel: ObservableObject {
             guard let self, self.isForeground, phase != nil else { return }
             Task { await self.feed.refresh() }
         })
+        forwardCancellables.append(self.feed.$turns.sink { [weak self] turns in
+            guard let self else { return }
+            guard self.isForeground, self.pairing.isPaired,
+                  let turn = turns.last, turn.status == "waiting_permission" else {
+                self.approvals.stop(); return
+            }
+            Task { await self.approvals.refresh(jobID: turn.id) }
+        })
         speech.onPlaybackStateChange = { [weak self] busy in
             guard let self else { return }
             self.voice.configure(conversationBusy: busy || self.conversation.isSending)
@@ -109,7 +119,7 @@ final class AppModel: ObservableObject {
         forChild(settings); forChild(sensors); forChild(pairing); forChild(feed)
         forChild(presentation); forChild(invitations); forChild(privateRoom)
         forChild(echo); forChild(voice); forChild(visual)
-        forChild(body); forChild(conversation); forChild(surfaceDelivery); forChild(systems)
+        forChild(approvals); forChild(body); forChild(conversation); forChild(surfaceDelivery); forChild(systems)
     }
 
     private func forChild<_Source: ObservableObject>(_ source: _Source) {
@@ -153,6 +163,7 @@ final class AppModel: ObservableObject {
             ringTask?.cancel(); ringTask = nil
             invitationTask?.cancel(); invitationTask = nil
             privateRoom.pause()
+            approvals.stop()
         }
     }
 
@@ -352,7 +363,7 @@ final class AppModel: ObservableObject {
         feed.followAllSurfaces(foreground: isForeground)
         systems.start(paired: pairing.isPaired, foreground: isForeground)
         updateInvitations()
-        if !pairing.isPaired { surfaceDelivery.stop(); privateRoom.stop(); clearStageDisplay() }
+        if !pairing.isPaired { approvals.stop(); surfaceDelivery.stop(); privateRoom.stop(); clearStageDisplay() }
     }
 
     func displayCommand(_ text: String) {

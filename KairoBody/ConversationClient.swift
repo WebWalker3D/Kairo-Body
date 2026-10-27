@@ -135,9 +135,7 @@ final class ConversationClient: ObservableObject {
                 guard current == self.generation else { return }
                 self.lastJobID = jobID
                 if turn.cancelRequested == true {
-                    try await self.http.agent("api/jobs/\(jobID)/cancel", method: "POST", body: [:])
-                    self.clearPending()
-                    self.status = "Stopped"
+                    try await self.cancelJob(jobID, generation: current)
                     return
                 }
                 try await self.settle(stored, jobID: jobID, generation: current)
@@ -246,7 +244,9 @@ final class ConversationClient: ObservableObject {
     private func handleFailure(_ error: Error, generation requestGeneration: Int) {
         guard requestGeneration == generation, !(error is CancellationError) else { return }
         // Outages keep the message for recovery; a definitive answer releases it.
-        if RequestFailure.kind(of: error) == .transient, let turn = pendingStore.load() {
+        if let turn = pendingStore.load(),
+           RequestFailure.kind(of: error) == .transient ||
+           (turn.cancelRequested == true && RequestFailure.kind(of: error) != .authorizationLost) {
             pendingRecovery = turn.jobID.map { .stillWorking(jobID: $0) } ?? .unconfirmed
         } else {
             clearPending()
@@ -303,16 +303,33 @@ final class ConversationClient: ObservableObject {
         status = "Stopping request…"
         let current = generation
         do {
-            _ = try await http.agent("api/jobs/\(jobID)/cancel", method: "POST", body: [:])
-            guard current == generation else { return }
-            clearPending()
-            status = "Stopped"
+            try await cancelJob(jobID, generation: current)
         } catch {
             guard current == generation else { return }
             pendingRecovery = .stillWorking(jobID: jobID)
             self.error = "Stop was not confirmed. The original request is retained so you can check it again."
             status = "Stop not confirmed"
             stopRequested = false
+        }
+    }
+
+    private func cancelJob(_ jobID: String, generation current: Int) async throws {
+        do {
+            let response = try await http.agentObject("api/jobs/\(jobID)/cancel", method: "POST", body: [:])
+            guard response["accepted"] as? Bool == true else { throw MalformedResponse() }
+            guard current == generation else { return }
+            clearPending()
+            status = "Stopped"
+        } catch let refusal as HTTPStatusError where refusal.status == 409 {
+            // Completion can win the cancellation race. Observe that job; do
+            // not discard its handle merely because Stop was refused.
+            let job = try await http.agentObject("api/jobs/\(jobID)?compact=1")
+            guard current == generation else { return }
+            let terminal = job["settled_status"] as? String ?? job["status"] as? String ?? ""
+            guard ["completed", "failed", "cancelled", "interrupted"].contains(terminal) else { throw refusal }
+            clearPending()
+            if terminal == "completed" { reply = job["settled_text"] as? String ?? "" }
+            status = ResponseActivity.headline(status: terminal, settled: terminal)
         }
     }
 
@@ -327,7 +344,14 @@ final class ConversationClient: ObservableObject {
     var currentGeneration: Int { generation }
     func showError(_ error: Error) { self.error = error.localizedDescription }
     func clearError() { error = nil }
-    func clearRecoveredTurn() { if !hasPendingTurn { pendingRecovery = nil } }
+    /// Called only after the user confirms that remote work may still finish.
+    func clearRecoveredTurn() {
+        guard !isSending, pendingRecovery != nil else { return }
+        generation += 1
+        responseTask?.cancel(); responseTask = nil
+        clearPending()
+        status = "Stopped tracking. Kairo may still finish on another surface."
+    }
 
     func clearChat() {
         guard canResetLocalSession else { return }

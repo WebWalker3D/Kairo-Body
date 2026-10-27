@@ -201,6 +201,7 @@ struct TurnCard: View {
                         .font(.caption).foregroundStyle(KairoTheme.mind)
                 }
             }
+            if turn.status == "waiting_permission" { ApprovalReviewView(jobID: turn.id) }
             if !turn.toolActivity.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
                     ForEach(turn.toolActivity.suffix(4), id: \.self) { activity in

@@ -1,6 +1,7 @@
 import Foundation
 
 struct PendingApproval: Equatable {
+    let observationID = UUID()
     let jobID: String
     let requestID: Int
     let description: String
@@ -29,5 +30,5 @@ final class ApprovalClient: ObservableObject {
 
     func refresh(jobID: String) async {}
     func stop() {}
-    func decide(requestID: Int, allow: Bool) async {}
+    func decide(_ item: PendingApproval, allow: Bool) async {}
 }

@@ -3,6 +3,7 @@ import XCTest
 
 @MainActor
 final class ApprovalClientTests: XCTestCase {
+    private let missingApproval = PendingApproval(jobID: "job_missing", requestID: 1, description: "missing", scope: "tool", truncated: false)
     private let proof = "kbp_" + String(repeating: "p", count: 40)
     private func snapshot(id: Any = 1, truncated: Bool = false) -> [String: Any] {
         ["approvals": [["job_id": "job_example", "request_id": id,
@@ -20,11 +21,13 @@ final class ApprovalClientTests: XCTestCase {
         })
         await client.refresh(jobID: "job_example")
         XCTAssertEqual(client.approval?.requestID, 1)
+        let observed = client.approval
         await client.refresh(jobID: "job_example")
         XCTAssertEqual(reads, 1)
         instant.addTimeInterval(9)
         await client.refresh(jobID: "job_example")
         XCTAssertEqual(reads, 2)
+        XCTAssertEqual(client.approval, observed)
     }
 
     func testOnlyExplicitOnceDecisionAndAcceptedIsQueued() async {
@@ -38,8 +41,8 @@ final class ApprovalClientTests: XCTestCase {
         })
         await client.refresh(jobID: "job_example")
         XCTAssertTrue(decisions.isEmpty)
-        await client.decide(requestID: 1, allow: true)
-        await client.decide(requestID: 1, allow: true)
+        await client.decide(client.approval ?? missingApproval, allow: true)
+        await client.decide(client.approval ?? missingApproval, allow: true)
         XCTAssertEqual(decisions, ["y"])
         XCTAssertNil(client.approval)
         XCTAssertTrue(client.status.contains("queued"))
@@ -57,7 +60,7 @@ final class ApprovalClientTests: XCTestCase {
             return self.snapshot(truncated: true)
         })
         await client.refresh(jobID: "job_example")
-        await client.decide(requestID: 1, allow: false)
+        await client.decide(client.approval ?? missingApproval, allow: false)
         XCTAssertEqual(posts, 0)
     }
 
@@ -69,8 +72,8 @@ final class ApprovalClientTests: XCTestCase {
                 posts += 1; throw HTTPStatusError(status: code)
             })
             await client.refresh(jobID: "job_example")
-            await client.decide(requestID: 1, allow: false)
-            await client.decide(requestID: 1, allow: false)
+            await client.decide(client.approval ?? missingApproval, allow: false)
+            await client.decide(client.approval ?? missingApproval, allow: false)
             XCTAssertEqual(posts, 1)
             XCTAssertNil(client.approval)
             XCTAssertNotNil(client.error)
@@ -99,7 +102,7 @@ final class ApprovalClientTests: XCTestCase {
         var calls = 0
         let client = ApprovalClient(ownerProof: { "" }, request: { _, _, _ in calls += 1; return self.snapshot() })
         await client.refresh(jobID: "job_example")
-        await client.decide(requestID: 1, allow: true)
+        await client.decide(client.approval ?? missingApproval, allow: true)
         XCTAssertEqual(calls, 0)
         let paired = ApprovalClient(ownerProof: { self.proof }, request: { _, _, _ in calls += 1; return self.snapshot() })
         await paired.refresh(jobID: "../permission")
@@ -116,9 +119,9 @@ final class ApprovalClientTests: XCTestCase {
             return await withCheckedContinuation { continuation = $0; entered.fulfill() }
         })
         await client.refresh(jobID: "job_example")
-        let decision = Task { await client.decide(requestID: 1, allow: false) }
+        let decision = Task { await client.decide(client.approval ?? missingApproval, allow: false) }
         await fulfillment(of: [entered], timeout: 2)
-        await client.decide(requestID: 1, allow: false)
+        await client.decide(client.approval ?? missingApproval, allow: false)
         XCTAssertEqual(posts, 1)
         client.stop()
         continuation?.resume(returning: ["accepted": true])
@@ -137,8 +140,59 @@ final class ApprovalClientTests: XCTestCase {
         })
         await client.refresh(jobID: "job_example")
         owner = "kbp_" + String(repeating: "q", count: 40)
-        await client.decide(requestID: 1, allow: true)
+        await client.decide(client.approval ?? missingApproval, allow: true)
         XCTAssertEqual(posts, 0)
         XCTAssertNil(client.approval)
+    }
+
+    func testStaleSnapshotCannotAuthorizeDecision() async {
+        var instant = Date(timeIntervalSince1970: 100)
+        var posts = 0
+        let client = ApprovalClient(ownerProof: { self.proof }, now: { instant }, request: { _, method, _ in
+            if method == "POST" { posts += 1 }
+            return self.snapshot()
+        })
+        await client.refresh(jobID: "job_example")
+        instant.addTimeInterval(31)
+        await client.decide(client.approval ?? missingApproval, allow: true)
+        XCTAssertEqual(posts, 0)
+        XCTAssertNil(client.approval)
+    }
+
+    func testOldConfirmationCannotDecideSameRequestIDOnAnotherJob() async {
+        var posts = 0
+        var selected = "job_example"
+        let client = ApprovalClient(ownerProof: { self.proof }, request: { _, method, _ in
+            if method == "POST" { posts += 1 }
+            return ["approvals": [["job_id": selected, "request_id": 1,
+                                    "description": "Inspect", "scope": "tool", "truncated": false]]]
+        })
+        await client.refresh(jobID: "job_example")
+        let old = client.approval ?? missingApproval
+        selected = "job_other"
+        await client.refresh(jobID: selected)
+        await client.decide(old, allow: true)
+        XCTAssertEqual(posts, 0)
+        XCTAssertEqual(client.approval?.jobID, "job_other")
+    }
+
+    func testFreshObservationAfterAmbiguousDecisionRequiresAnotherExplicitDecision() async {
+        var posts = 0
+        let client = ApprovalClient(ownerProof: { self.proof }, request: { _, method, _ in
+            if method == "GET" { return self.snapshot() }
+            posts += 1
+            if posts == 1 { throw URLError(.timedOut) }
+            return ["accepted": true]
+        })
+        await client.refresh(jobID: "job_example")
+        let first = client.approval ?? missingApproval
+        await client.decide(first, allow: false)
+        await client.refresh(jobID: "job_example")
+        XCTAssertEqual(posts, 1)
+        XCTAssertNotEqual(client.approval, first)
+        await client.decide(first, allow: false)
+        XCTAssertEqual(posts, 1)
+        await client.decide(client.approval ?? missingApproval, allow: false)
+        XCTAssertEqual(posts, 2)
     }
 }

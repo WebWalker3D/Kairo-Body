@@ -36,7 +36,7 @@ final class ResponseSceneTests: XCTestCase {
         feed.followAllSurfaces(foreground: true)
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 1280, height: 884))
         window.rootViewController = UIHostingController(rootView: PresenceStageView()
-            .environmentObject(model).environment(\.accessibilityReduceMotion, true).preferredColorScheme(.dark))
+            .environmentObject(model).preferredColorScheme(.dark))
         window.makeKeyAndVisible()
         defer { window.isHidden = true }
         for phase in ["running", "waiting_permission", "completed"] {
