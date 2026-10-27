@@ -96,8 +96,8 @@ final class PairingClient: ObservableObject {
                       let endpoint = data["endpoint_id"] as? String, !endpoint.isEmpty else {
                     throw MalformedResponse()
                 }
-                try self.saveProof(credential)
                 guard attempt == self.pairingGeneration, !Task.isCancelled else { return }
+                try self.saveProof(credential)
                 self.defaults.set(endpoint, forKey: "pairedEndpointID")
                 self.state = .paired(endpointID: endpoint)
             } catch {

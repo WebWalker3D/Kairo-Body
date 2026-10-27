@@ -97,6 +97,51 @@ final class PrivateLifecycleTests: XCTestCase {
         XCTAssertEqual(room.reply, "")
     }
 
+    func testUnconfirmedPrivatePostRecoversExactBodyWithoutReplacingIt() async throws {
+        var bodies: [Data] = []
+        let room = PrivateRoomClient(ownerProof: { self.proof }, hasAgentToken: { true }, request: { path, _, body, _ in
+            if path == "api/ipad/private/session" { return ["id": "private_1", "metadata_json": ["client": "ipad_private"]] }
+            if path.hasSuffix("/jobs") {
+                let body = try XCTUnwrap(body)
+                XCTAssertEqual(body["prompt"] as? String, "Original private question")
+                XCTAssertTrue((body["idempotency_key"] as? String)?.hasPrefix("ipad-private:") == true)
+                bodies.append(try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys]))
+                if bodies.count == 1 { throw URLError(.timedOut) }
+                return ["id": "job_private"]
+            }
+            return ["settled_status": "completed", "settled_text": "Recovered once"]
+        })
+        await room.send("Original private question")
+        XCTAssertTrue(room.hasPendingTurn)
+        await room.send("This must not replace the pending request")
+        XCTAssertEqual(bodies.count, 1)
+        await room.resumePending()
+        XCTAssertEqual(bodies.count, 2)
+        XCTAssertEqual(bodies.first, bodies.last)
+        XCTAssertFalse(room.hasPendingTurn)
+        XCTAssertEqual(room.reply, "Recovered once")
+    }
+
+    func testTransientPrivatePollFailureKeepsVisibleReplyAndPendingHandle() async {
+        var pollFails = false
+        var posts = 0
+        let room = PrivateRoomClient(ownerProof: { self.proof }, hasAgentToken: { true }, request: { path, _, _, _ in
+            if path == "api/ipad/private/session" { return ["id": "private_1", "metadata_json": ["client": "ipad_private"]] }
+            if path.hasSuffix("/jobs") { posts += 1; return ["id": "job_private_\(posts)"] }
+            if pollFails { throw HTTPStatusError(status: 503) }
+            return ["settled_status": "completed", "settled_text": "Private answer"]
+        })
+        await room.send("First")
+        pollFails = true
+        await room.send("Second")
+        XCTAssertEqual(room.reply, "Private answer")
+        XCTAssertTrue(room.hasPendingTurn)
+        pollFails = false
+        await room.resumePending()
+        XCTAssertEqual(posts, 2)
+        XCTAssertFalse(room.hasPendingTurn)
+    }
+
     func testForgottenPairingCannotStoreLateCredential() async {
         let response = DeferredResponse()
         var stored = ""

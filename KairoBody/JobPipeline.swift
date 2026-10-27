@@ -11,6 +11,7 @@ struct PendingTurn: Codable, Equatable {
     var outputDestination: String?
     let submittedAt: Date
     var jobID: String?
+    var cancelRequested: Bool? = nil
 
     static func new(sessionID: String, text: String, attachmentIDs: [String],
                     outputDestination: String?, at date: Date = Date()) -> PendingTurn {
@@ -102,16 +103,19 @@ final class JobTracker: @unchecked Sendable {
             }
         }
         do {
-            let key = turn.idempotencyKey.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
-                ?? turn.idempotencyKey
-            let found = try await request("\(turn.submissionPath)?idempotency_key=\(key)", "GET", nil)
-            if let rows = found as? [[String: Any]], let id = rows.first?["id"] as? String, WireID.valid(id) {
-                return id
-            }
+            if let id = try await findSubmitted(turn) { return id }
         } catch {
             guard RequestFailure.kind(of: error) == .transient else { throw error }
         }
         throw SubmissionUnconfirmed(turn: turn)
+    }
+
+    func findSubmitted(_ turn: PendingTurn) async throws -> String? {
+        let key = turn.idempotencyKey.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? turn.idempotencyKey
+        let found = try await request("\(turn.submissionPath)?idempotency_key=\(key)", "GET", nil)
+        guard let rows = found as? [[String: Any]] else { throw MalformedResponse() }
+        guard let id = rows.first?["id"] as? String, WireID.valid(id) else { return nil }
+        return id
     }
 
     /// Polls until the job settles or `deadline` seconds have elapsed since
@@ -120,6 +124,7 @@ final class JobTracker: @unchecked Sendable {
     /// `onPoll` sees every job read, including the settling one, so callers
     /// can show final progress before applying the result.
     func waitForSettlement(jobID: String, since: Date,
+                           onConnectionChange: @escaping @MainActor (Bool) -> Void = { _ in },
                            onPoll: @escaping @MainActor ([String: Any]) async -> Void) async throws -> JobWait {
         var failures = 0
         var last: [String: Any]?
@@ -130,11 +135,13 @@ final class JobTracker: @unchecked Sendable {
                 guard let job = value as? [String: Any] else { throw MalformedResponse() }
                 failures = 0
                 last = job
+                await onConnectionChange(true)
                 await onPoll(job)
                 if job["settled_status"] is String { return .settled(job) }
             } catch {
                 guard RequestFailure.kind(of: error) == .transient, !Task.isCancelled else { throw error }
                 failures += 1
+                await onConnectionChange(false)
             }
             let remaining = Self.deadline - now().timeIntervalSince(since)
             guard remaining > 0 else { return .stillRunning(last) }

@@ -115,9 +115,12 @@ private struct SettingsForm: View {
         Section("About") {
             LabeledContent("Version", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown")
             LabeledContent("Body protocol", value: "kairo-body/1")
-            Button("Reset shared conversation session", role: .destructive) {
+            Button("Start a new iPad conversation", role: .destructive) {
                 model.conversation.clearChat()
             }
+            .disabled(!model.conversation.canResetLocalSession)
+            Text("Starts fresh only for this iPad's separate conversation. A pending request must finish first. The Dot's shared conversation is not reset here.")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 

@@ -13,7 +13,7 @@ final class AppModel: ObservableObject {
     let settings = AppSettings()
     let sensors = SensorManager()
     let pairing = PairingClient()
-    let feed = TranscriptFeedClient()
+    let feed: TranscriptFeedClient
     let presentation = PresentationClient()
     let invitations = InvitationClient()
     let privateRoom = PrivateRoomClient()
@@ -52,8 +52,9 @@ final class AppModel: ObservableObject {
         var id: String { rawValue }
     }
 
-    init(deliveryRequest: SurfaceDeliveryClient.Request? = nil,
+    init(feed: TranscriptFeedClient? = nil, deliveryRequest: SurfaceDeliveryClient.Request? = nil,
          surfaceUnobscured: @escaping @MainActor () -> Bool = { SurfaceVisibility.isUnobscured() }) {
+        self.feed = feed ?? TranscriptFeedClient()
         self.surfaceUnobscured = surfaceUnobscured
         AppConfig.provisionOnFirstLaunch()
         let http = KairoHTTP()
@@ -78,6 +79,21 @@ final class AppModel: ObservableObject {
         }
         conversation.stopOutput = { [weak self] in self?.surfaceDelivery.stop() }
         forwardChangePublishers()
+        forwardCancellables.append(conversation.$isSending.removeDuplicates().sink { [weak self] busy in
+            guard let self else { return }
+            self.voice.configure(conversationBusy: busy || self.speech.isBusy)
+            if !busy && !self.speech.isBusy { self.voice.responseFinished() }
+        })
+        forwardCancellables.append(echo.$state.map { $0.activity?.phase }.removeDuplicates().sink { [weak self] phase in
+            guard let self, self.isForeground, phase != nil else { return }
+            Task { await self.feed.refresh() }
+        })
+        speech.onPlaybackStateChange = { [weak self] busy in
+            guard let self else { return }
+            self.voice.configure(conversationBusy: busy || self.conversation.isSending)
+            if !busy && !self.conversation.isSending { self.voice.responseFinished() }
+            self.objectWillChange.send()
+        }
     }
 
     private let camera: CameraCaptureService
@@ -105,7 +121,11 @@ final class AppModel: ObservableObject {
     func wireVoiceCallbacks() {
         voice.onCommand = { [weak self] command in
             guard let self else { return }
-            Task { await self.conversation.send(command) }
+            Task {
+                await self.conversation.send(command)
+                self.voice.configure(conversationBusy: self.conversation.isSending || self.speech.isBusy)
+                self.voice.responseFinished()
+            }
         }
         voice.onWake = { [weak self] in self?.body.noteUserActivity() }
     }
@@ -123,15 +143,16 @@ final class AppModel: ObservableObject {
         feed.followAllSurfaces(foreground: foreground)
         presentation.start(paired: pairing.isPaired, foreground: foreground)
         voice.configure(enabled: settings.voiceWakeEnabled, foreground: foreground,
-                        conversationBusy: conversation.isSending)
+                        conversationBusy: conversation.isSending || speech.isBusy)
         Task { await invitations.refresh(foreground: foreground && settings.invitationsEnabled && pairing.isPaired) }
         if foreground {
             startLoops()
             Task { await conversation.recoverPendingTurn() }
+            Task { await privateRoom.resumePending() }
         } else {
             ringTask?.cancel(); ringTask = nil
             invitationTask?.cancel(); invitationTask = nil
-            privateRoom.stop()
+            privateRoom.pause()
         }
     }
 
@@ -144,7 +165,7 @@ final class AppModel: ObservableObject {
         feed.followAllSurfaces(foreground: isForeground)
         presentation.start(paired: pairing.isPaired, foreground: isForeground)
         voice.configure(enabled: settings.voiceWakeEnabled, foreground: isForeground,
-                        conversationBusy: conversation.isSending)
+                        conversationBusy: conversation.isSending || speech.isBusy)
         startLoops()
         Task { await conversation.recoverPendingTurn() }
     }
@@ -154,7 +175,7 @@ final class AppModel: ObservableObject {
         sensors.setLocationEnabled(settings.sendLocation)
         echo.follow(token: AppConfig.agentToken, foreground: isForeground && settings.followEcho)
         voice.configure(enabled: settings.voiceWakeEnabled, foreground: isForeground,
-                        conversationBusy: conversation.isSending)
+                        conversationBusy: conversation.isSending || speech.isBusy)
         updateInvitations()
     }
 
@@ -290,7 +311,7 @@ final class AppModel: ObservableObject {
     func bodyContactEnded(durationMs: Int, pathLength: Double, cancelled: Bool) {
         let intent = ContactIntent.classify(durationMs: durationMs, pathLength: pathLength, cancelled: cancelled)
         guard ContactIntent.shouldSubmit(isBodySurface: destination == .stage, cancelled: cancelled,
-                                         conversationBusy: conversation.isSending),
+                                         conversationBusy: conversation.isSending || speech.isBusy),
               let endpointID = body.serverEndpointID else { return }
         contactCounter += 1
         let contactID = "ipad:\(body.sessionID):\(contactCounter)"

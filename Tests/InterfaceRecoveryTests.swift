@@ -18,6 +18,12 @@ final class PrivateMessageDraftTests: XCTestCase {
         XCTAssertEqual(draft.takeForSubmission(busy: false), original)
         XCTAssertTrue(draft.text.isEmpty)
     }
+
+    func testWhitespaceOnlyMessageIsRetainedWithoutSubmission() {
+        var draft = PrivateMessageDraft(text: " \n \t")
+        XCTAssertNil(draft.takeForSubmission(busy: false))
+        XCTAssertEqual(draft.text, " \n \t")
+    }
 }
 
 @MainActor
@@ -58,5 +64,21 @@ final class CredentialStorageTests: XCTestCase {
             add: { _ in errSecInteractionNotAllowed },
             delete: { _ in errSecSuccess })
         XCTAssertThrowsError(try KeychainStore.setChecked("test-token", service: "test", account: "test", operations: operations))
+    }
+
+    func testSuccessfulReplacementUpdatesExistingCredential() throws {
+        var stored = Data("old-test-token".utf8)
+        let operations = KeychainStore.Operations(
+            update: { query, changes in
+                guard query[kSecAttrService as String] as? String == "test-service",
+                      query[kSecAttrAccount as String] as? String == "test-account",
+                      let replacement = changes[kSecValueData as String] as? Data else { return errSecParam }
+                stored = replacement
+                return errSecSuccess
+            },
+            add: { _ in errSecDuplicateItem },
+            delete: { _ in XCTFail("Replacing a credential must not delete it first"); return errSecSuccess })
+        try KeychainStore.setChecked("new-test-token", service: "test-service", account: "test-account", operations: operations)
+        XCTAssertEqual(stored, Data("new-test-token".utf8))
     }
 }

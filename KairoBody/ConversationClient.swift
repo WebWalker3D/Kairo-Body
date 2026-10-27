@@ -66,6 +66,9 @@ final class ConversationClient: ObservableObject {
     @Published private(set) var isSending = false
     @Published private(set) var promptProgress: PromptTokenProgress?
     @Published private(set) var pendingRecovery: PendingRecovery?
+    @Published private(set) var submittedText = ""
+    @Published private(set) var submittedAt: Date?
+    @Published private(set) var lastObservedAt: Date?
     @Published var draft = ""
     @Published var outputDestination: OutputDestination = .automatic
 
@@ -96,11 +99,21 @@ final class ConversationClient: ObservableObject {
         })
     }
 
+    var responseJobID: String { lastJobID }
     var hasPendingTurn: Bool { pendingStore.load() != nil }
+    var canSubmit: Bool { !isSending && !hasPendingTurn }
+    var canResetLocalSession: Bool {
+        canSubmit && !(settings.followEcho && EchoBinding.sessionID(EchoBinding.configuredSessionID) != nil)
+    }
 
     func recoverPendingTurn() async {
-        guard let turn = pendingStore.load() else { return }
+        guard !isSending, let turn = pendingStore.load() else { return }
         isSending = true
+        error = nil
+        submittedText = turn.text
+        submittedAt = turn.submittedAt
+        status = turn.cancelRequested == true ? "Checking the stopped request…" : "Checking your previous message…"
+        generation += 1
         let current = generation
         responseTask = Task { [weak self] in
             guard let self else { return }
@@ -108,28 +121,50 @@ final class ConversationClient: ObservableObject {
             do {
                 let jobID: String
                 if let existing = turn.jobID { jobID = existing }
-                else { jobID = try await self.tracker.submit(turn) }
+                else if turn.cancelRequested == true {
+                    guard let found = try await self.tracker.findSubmitted(turn) else {
+                        self.pendingRecovery = .unconfirmed
+                        self.status = "Submission is unconfirmed. This stopped message will not be sent again."
+                        return
+                    }
+                    jobID = found
+                } else { jobID = try await self.tracker.submit(turn) }
+                guard current == self.generation, !Task.isCancelled else { return }
                 var stored = turn; stored.jobID = jobID
                 self.pendingStore.save(stored)
                 guard current == self.generation else { return }
                 self.lastJobID = jobID
+                if turn.cancelRequested == true {
+                    try await self.http.agent("api/jobs/\(jobID)/cancel", method: "POST", body: [:])
+                    self.clearPending()
+                    self.status = "Stopped"
+                    return
+                }
                 try await self.settle(stored, jobID: jobID, generation: current)
             } catch {
                 self.handleFailure(error, generation: current)
             }
         }
+        await responseTask?.value
     }
 
+    @discardableResult
     func send(_ text: String, attachmentIDs: [String] = [],
-              attachmentSessionID: String? = nil) async {
+              attachmentSessionID: String? = nil) async -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !isSending, !trimmed.isEmpty, trimmed.count <= 16_000 else { return }
+        guard canSubmit, !trimmed.isEmpty, trimmed.count <= 16_000 else { return false }
         isSending = true
         error = nil
         reply = ""
-        status = ""
+        status = "Sending your message…"
+        submittedText = trimmed
+        submittedAt = Date()
+        lastObservedAt = nil
+        lastJobID = ""
+        if draft.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed { draft = "" }
         promptProgress = nil
         stopRequested = false
+        generation += 1
         let current = generation
         responseTask?.cancel()
         let destination = outputDestination.surfaceTarget
@@ -148,11 +183,12 @@ final class ConversationClient: ObservableObject {
                                            attachmentIDs: attachmentIDs, outputDestination: destination)
                 self.pendingStore.save(turn)
                 let jobID = try await self.tracker.submit(turn)
+                guard current == self.generation, !Task.isCancelled else { return }
                 var stored = turn; stored.jobID = jobID
                 self.pendingStore.save(stored)
                 guard current == self.generation else { throw CancellationError() }
                 self.lastJobID = jobID
-                self.status = "Kairo is responding…"
+                self.status = "Received by Kairo — waiting for progress…"
                 try await self.settle(stored, jobID: jobID, generation: current)
             } catch {
                 self.handleFailure(error, generation: current)
@@ -160,14 +196,24 @@ final class ConversationClient: ObservableObject {
             if current == self.generation { self.isSending = false }
         }
         await responseTask?.value
+        return true
     }
 
     private func settle(_ turn: PendingTurn, jobID: String, generation current: Int) async throws {
-        let wait = try await tracker.waitForSettlement(jobID: jobID, since: turn.submittedAt) { job in
+        let wait = try await tracker.waitForSettlement(jobID: jobID, since: turn.submittedAt,
+            onConnectionChange: { connected in
+                guard current == self.generation else { return }
+                if !connected { self.status = "Connection interrupted — checking the same request…" }
+            }) { job in
             guard current == self.generation else { return }
-            if let events = try? await self.http.agentArray("api/jobs/\(jobID)/events?tail=32"),
-               let progress = events.compactMap(PromptTokenProgress.init(event:)).max(by: { $0.sequence < $1.sequence }) {
-                self.promptProgress = progress
+            self.lastObservedAt = Date()
+            self.status = ResponseActivity.headline(status: job["status"] as? String ?? "unknown",
+                                                     settled: job["settled_status"] as? String)
+            // A completed answer never waits on optional progress telemetry.
+            guard job["settled_status"] == nil else { return }
+            if let events = try? await self.http.agent("api/jobs/\(jobID)/events?tail=32", timeout: 3) as? [[String: Any]],
+               current == self.generation {
+                self.promptProgress = events.compactMap(PromptTokenProgress.init(event:)).max(by: { $0.sequence < $1.sequence })
             }
         }
         guard current == generation else { throw CancellationError() }
@@ -176,10 +222,10 @@ final class ConversationClient: ObservableObject {
             clearPending()
             let settled = job["settled_status"] as? String ?? ""
             guard settled == "completed", let answer = job["settled_text"] as? String else {
-                throw ConversationError.jobFailed("Kairo's response ended as \(settled).")
+                throw ConversationError.jobFailed(String((job["error"] as? String ?? "Kairo's response ended as \(settled).").prefix(500)))
             }
             reply = answer
-            status = ""
+            status = "Answer ready"
             if let target = SurfaceOutputPolicy.target(job: job, requested: turn.outputDestination) {
                 await deliverOutput?(jobID, target)
             } else {
@@ -205,6 +251,7 @@ final class ConversationClient: ObservableObject {
         } else {
             clearPending()
         }
+        if !hasPendingTurn, reply.isEmpty, draft.isEmpty { draft = submittedText }
         stopOutput?()
         self.error = error.localizedDescription
         status = ""
@@ -239,15 +286,34 @@ final class ConversationClient: ObservableObject {
     func stopResponse() async {
         guard !stopRequested else { return }
         stopRequested = true
+        generation += 1
         responseTask?.cancel()
+        responseTask = nil
         stopOutput?()
         speech.stop()
-        if WireID.valid(lastJobID), isSending || pendingRecovery != nil {
-            _ = try? await http.agent("api/jobs/\(lastJobID)/cancel", method: "POST", body: [:])
-        }
-        clearPending()
         isSending = false
-        status = "Stopped"
+        guard var turn = pendingStore.load() else { status = "Stopped"; return }
+        turn.cancelRequested = true
+        pendingStore.save(turn)
+        guard let jobID = turn.jobID, WireID.valid(jobID) else {
+            pendingRecovery = .unconfirmed
+            status = "Stopped here. Checking whether Kairo received the message is still available."
+            return
+        }
+        status = "Stopping request…"
+        let current = generation
+        do {
+            _ = try await http.agent("api/jobs/\(jobID)/cancel", method: "POST", body: [:])
+            guard current == generation else { return }
+            clearPending()
+            status = "Stopped"
+        } catch {
+            guard current == generation else { return }
+            pendingRecovery = .stillWorking(jobID: jobID)
+            self.error = "Stop was not confirmed. The original request is retained so you can check it again."
+            status = "Stop not confirmed"
+            stopRequested = false
+        }
     }
 
     func isKairoProcessing() async -> Bool? {
@@ -261,9 +327,10 @@ final class ConversationClient: ObservableObject {
     var currentGeneration: Int { generation }
     func showError(_ error: Error) { self.error = error.localizedDescription }
     func clearError() { error = nil }
-    func clearRecoveredTurn() { clearPending() }
+    func clearRecoveredTurn() { if !hasPendingTurn { pendingRecovery = nil } }
 
     func clearChat() {
+        guard canResetLocalSession else { return }
         generation += 1
         stopRequested = false
         stopOutput?()
@@ -271,6 +338,7 @@ final class ConversationClient: ObservableObject {
         settings.sharedSessionID = ""
         clearPending()
         reply = ""
+        submittedText = ""; submittedAt = nil; lastObservedAt = nil
         error = nil
         status = ""
         isSending = false

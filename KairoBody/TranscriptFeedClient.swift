@@ -59,12 +59,20 @@ final class TranscriptFeedClient: ObservableObject {
     func followAllSurfaces(foreground: Bool) {
         // Already following this owner in the foreground: keep the running
         // loop. Restarting would discard the read in flight.
+        let credential = ownerProof()
         if foreground, following, pollTask != nil,
-           observerCredential == ownerProof() { return }
+           observerCredential == credential { return }
         stop()
         self.foreground = foreground
         guard agentAvailable(),
-              PairingClient.validCredential(ownerProof()) else { clearObserver(); return }
+              PairingClient.validCredential(credential) else { clearObserver(); return }
+        // Bind authority before capturing the loop generation. The first read
+        // must not invalidate its own loop, and switching owners must clear
+        // private content even while a cancelled request is still unwinding.
+        if observerCredential != credential {
+            clearObserver()
+            observerCredential = credential
+        }
         // Leaving the foreground pauses reads but keeps the transcript and its
         // scroll position; only missing or refused authority clears it.
         guard foreground else { return }
@@ -123,7 +131,8 @@ final class TranscriptFeedClient: ObservableObject {
             // A different owner proof is a different conversation authority.
             clearObserver()
             observerCredential = credential
-            generation += 1
+            // Credential checks below reject obsolete responses. A new owner
+            // must not retire the polling loop that is observing this change.
         }
         let current = generation
         refreshing = true

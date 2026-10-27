@@ -21,3 +21,9 @@ Strengths: explicit output claims, mounted display acknowledgment, separate owne
 - Production health, model latency, installed version and remote routing were outside this app-only review and were not inferred from checkout state.
 
 Assessment: fixes required before a reliability release. The private/voice lifecycle gaps are independent of the known shared-feed generation failure.
+
+## Private/pairing repair candidate
+
+The unified RED run `40428867040` reproduced all five private/pairing regression cases (eight assertion failures), as recorded by the coordinator in `/tmp/body-audit-red.log`. The candidate now separates background pause from owner-context removal, fences private async results by generation and owner identity, and retains a pending request only in memory. Known jobs resume by handle; an unconfirmed submission reuses its original body/key. Accepted job handles release the retained prompt. Authorization loss clears all private content. Pairing checks cancellation/generation before writing owner proof.
+
+Seven private/pairing tests now cover the original five cases plus byte-identical ambiguous-submission recovery and preservation through a transient poll failure. The latter two are added coverage; they were not individually executed in the first RED run. No local Swift/Xcode is available; the coordinator's next simulator workflow must qualify GREEN. Recovery intentionally does not survive app termination, and the UI should disclose that limit. AppModel must call `pause()` on foreground loss, `resumePending()` on foreground return, and `stop()` on unpair.

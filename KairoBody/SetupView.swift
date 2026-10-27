@@ -10,6 +10,7 @@ struct SetupView: View {
     @State private var agent = ""
     @State private var sensory = ""
     @State private var echoSession = AppConfig.echoSessionID
+    @State private var saveError: String?
 
     var body: some View {
         NavigationStack {
@@ -35,15 +36,30 @@ struct SetupView: View {
                     Button("Save and connect") {
                         let trimmedAgent = agent.trimmingCharacters(in: .whitespacesAndNewlines)
                         let trimmedSensory = sensory.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !trimmedAgent.isEmpty { AppConfig.agentToken = trimmedAgent }
-                        if !trimmedSensory.isEmpty { AppConfig.sensoryToken = trimmedSensory }
-                        AppConfig.echoSessionID = echoSession
-                        model.connectIfNeeded()
-                        dismiss()
+                        do {
+                            if !trimmedAgent.isEmpty {
+                                try KeychainStore.setChecked(trimmedAgent, service: AppConfig.keychainService,
+                                                             account: AppConfig.agentAccount)
+                            }
+                            if !trimmedSensory.isEmpty {
+                                try KeychainStore.setChecked(trimmedSensory, service: AppConfig.keychainService,
+                                                             account: AppConfig.bearerAccount)
+                            }
+                            AppConfig.echoSessionID = echoSession
+                            saveError = nil
+                            model.connectIfNeeded()
+                            dismiss()
+                        } catch {
+                            saveError = error.localizedDescription + " Check the entries and try saving again."
+                        }
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(agent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                               && AppConfig.agentToken.isEmpty)
+                    if let saveError {
+                        Text(saveError).foregroundStyle(KairoTheme.danger)
+                            .accessibilityIdentifier("credentialSaveError")
+                    }
                     if !AppConfig.agentToken.isEmpty {
                         Button("Continue with stored credentials") { dismiss() }
                     } else {

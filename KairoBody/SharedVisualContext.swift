@@ -42,9 +42,11 @@ final class SharedVisualContext: ObservableObject {
         generation = UUID()
         attachmentID = nil; sha256 = nil; source = nil; observedAt = nil; sessionID = nil
         previewJPEG = nil; error = nil
+        discussionReply = ""
     }
     func fail(_ reason: String) { error = reason }
     func recordReply(_ reply: String, selection: UUID) {
+        guard selection == generation else { return }
         discussionReply = reply
     }
     func attachmentIDs(for sessionID: String) -> [String] {

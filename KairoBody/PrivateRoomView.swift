@@ -6,6 +6,7 @@ import SwiftUI
 /// Dismiss on this device.
 struct PrivateRoomView: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.scenePhase) private var scenePhase
     @State private var code = ""
     @State private var draft = PrivateMessageDraft()
     @State private var confirmWake = false
@@ -32,6 +33,12 @@ struct PrivateRoomView: View {
             .frame(maxWidth: .infinity)
         }
         .background(KairoTheme.background)
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { draft.text = ""; code = "" }
+        }
+        .onChange(of: model.pairing.isPaired) { _, paired in
+            if !paired { draft.text = ""; code = "" }
+        }
     }
 
     private var header: some View {
@@ -127,6 +134,13 @@ struct PrivateRoomView: View {
                 if let error = model.privateRoom.error {
                     Text(error).font(.caption).foregroundStyle(KairoTheme.danger)
                 }
+                if model.privateRoom.hasPendingTurn && !model.privateRoom.busy {
+                    Button("Check private reply") {
+                        Task { await model.privateRoom.resumePending() }
+                    }
+                    Text("Your earlier request is still pending. Check it before sending another message. This recovery is kept only while the app remains open.")
+                        .font(.caption).foregroundStyle(KairoTheme.chrome)
+                }
                 HStack(spacing: 10) {
                     TextField("Say something only Kairo will hear", text: $draft.text, axis: .vertical)
                         .lineLimit(1...5)
@@ -135,15 +149,20 @@ struct PrivateRoomView: View {
                         .overlay(RoundedRectangle(cornerRadius: 12).stroke(KairoTheme.hairline))
                         .foregroundStyle(KairoTheme.prose)
                     Button {
-                        guard let text = draft.takeForSubmission(busy: model.privateRoom.busy) else { return }
+                        guard let text = draft.takeForSubmission(busy: model.privateRoom.busy || model.privateRoom.hasPendingTurn) else { return }
                         Task { await model.privateRoom.send(text) }
                     } label: {
                         Image(systemName: "arrow.up.circle.fill").font(.system(size: 26))
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(model.privateRoom.busy || draft.text.trimmingCharacters(in: .whitespaces).isEmpty
+                    .foregroundStyle(model.privateRoom.busy || model.privateRoom.hasPendingTurn || !draft.isValid
                                      ? KairoTheme.faint : KairoTheme.mind)
-                    .disabled(model.privateRoom.busy || draft.text.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(model.privateRoom.busy || model.privateRoom.hasPendingTurn || !draft.isValid)
+                    .accessibilityLabel("Send private message")
+                }
+                if draft.characterCount > PrivateMessageDraft.limit {
+                    Text("Private messages can contain up to 4,000 characters. Your draft has \(draft.characterCount).")
+                        .font(.caption).foregroundStyle(KairoTheme.warn)
                 }
                 if model.privateRoom.busy {
                     HStack { ProgressView().tint(KairoTheme.mind); Text(model.privateRoom.status.isEmpty ? "Kairo is considering…" : model.privateRoom.status)
@@ -188,10 +207,13 @@ struct PrivateRoomView: View {
 }
 
 struct PrivateMessageDraft {
+    static let limit = 4_000
     var text = ""
+    var characterCount: Int { text.trimmingCharacters(in: .whitespacesAndNewlines).count }
+    var isValid: Bool { (1...Self.limit).contains(characterCount) }
 
     mutating func takeForSubmission(busy: Bool) -> String? {
-        guard !busy, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        guard !busy, isValid else { return nil }
         let submitted = text
         text = ""
         return submitted

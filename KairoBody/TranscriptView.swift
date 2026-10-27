@@ -10,6 +10,7 @@ struct TranscriptView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            ResponseActivityView(showShared: false).padding(.horizontal, 18).padding(.bottom, 8)
             if let trouble = model.feed.connectionTrouble {
                 Text(trouble)
                     .font(.caption)
@@ -17,9 +18,6 @@ struct TranscriptView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 18).padding(.vertical, 6)
                     .background(KairoTheme.warn.opacity(0.08))
-            }
-            if let recovery = model.conversation.pendingRecovery {
-                recoveryBanner(recovery)
             }
             if model.settings.echoTranscriptVisible {
                 turnsList
@@ -69,7 +67,7 @@ struct TranscriptView: View {
                 Text("Your message is still in Kairo's hands (\(jobID.prefix(18))…). Its answer will appear here.")
             }
             Spacer()
-            Button("Dismiss") { model.conversation.clearRecoveredTurn() }
+            Button("Check original request") { Task { await model.conversation.recoverPendingTurn() } }
                 .font(.caption).foregroundStyle(KairoTheme.chrome)
         }
         .font(.caption)
@@ -86,7 +84,15 @@ struct TranscriptView: View {
                         TurnCard(turn: turn)
                             .id(turn.id)
                     }
-                    if model.feed.turns.isEmpty {
+                    if !model.conversation.reply.isEmpty,
+                       !model.feed.turns.contains(where: { $0.id == model.conversation.responseJobID }) {
+                        PlaneCard {
+                            Eyebrow(text: "This iPad", color: KairoTheme.body)
+                            Text(model.conversation.submittedText).font(.subheadline).foregroundStyle(KairoTheme.chrome)
+                            Text(model.conversation.reply).textSelection(.enabled).foregroundStyle(KairoTheme.prose)
+                        }
+                    }
+                    if model.feed.turns.isEmpty && model.conversation.reply.isEmpty {
                         Text(model.feed.following
                              ? "Kairo's conversation across the Dot, Discord and this iPad will appear here."
                              : "Owner pairing brings the shared conversation onto this iPad.")
@@ -148,7 +154,6 @@ struct TranscriptView: View {
                     .foregroundStyle(KairoTheme.prose)
                 Button {
                     let text = model.conversation.draft
-                    model.conversation.draft = ""
                     composerFocused = false
                     Task { await model.conversation.send(text) }
                 } label: {
@@ -158,7 +163,7 @@ struct TranscriptView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(model.conversation.draft.trimmingCharacters(in: .whitespaces).isEmpty
                                  ? KairoTheme.faint : KairoTheme.primary)
-                .disabled(model.conversation.draft.trimmingCharacters(in: .whitespaces).isEmpty || model.conversation.draft.trimmingCharacters(in: .whitespacesAndNewlines).count > 16_000 || model.conversation.isSending)
+                .disabled(model.conversation.draft.trimmingCharacters(in: .whitespaces).isEmpty || model.conversation.draft.trimmingCharacters(in: .whitespacesAndNewlines).count > 16_000 || !model.conversation.canSubmit)
             }
         }
         .padding(.horizontal, 18)
@@ -192,9 +197,7 @@ struct TurnCard: View {
             if turn.active {
                 HStack(spacing: 8) {
                     Circle().fill(KairoTheme.mind).frame(width: 7, height: 7)
-                    Text(turn.status == "waiting_permission"
-                         ? "Kairo is waiting on an owner decision"
-                         : "Kairo is working…")
+                    Text(ResponseActivity.headline(status: turn.status, settled: turn.settledStatus))
                         .font(.caption).foregroundStyle(KairoTheme.mind)
                 }
             }
@@ -204,6 +207,10 @@ struct TurnCard: View {
                         Text(activity).font(.caption2).foregroundStyle(KairoTheme.chrome)
                     }
                 }
+            }
+            if let settled = turn.settledStatus, settled != "completed" {
+                Label(ResponseActivity.headline(status: turn.status, settled: settled), systemImage: "exclamationmark.circle")
+                    .font(.caption).foregroundStyle(KairoTheme.warn)
             }
             if !turn.answer.isEmpty {
                 Divider().overlay(KairoTheme.hairline)

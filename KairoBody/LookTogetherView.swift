@@ -53,12 +53,19 @@ struct LookTogetherView: View {
                         .overlay(RoundedRectangle(cornerRadius: 12).stroke(KairoTheme.hairline))
                         .foregroundStyle(KairoTheme.prose)
                     Button {
-                        guard let id = model.visual.sessionID else { return }
+                        guard model.conversation.canSubmit, let id = model.visual.sessionID else { return }
                         let question = self.question
                         let attachments = model.visual.attachmentIDs(for: id)
                         guard !attachments.isEmpty else { return }
-                        Task { await model.conversation.send(question, attachmentIDs: attachments,
-                                                             attachmentSessionID: id) }
+                        let selection = model.visual.generation
+                        model.visual.recordReply("", selection: selection)
+                        Task {
+                            let accepted = await model.conversation.send(question, attachmentIDs: attachments,
+                                                                        attachmentSessionID: id)
+                            if accepted, !model.conversation.reply.isEmpty {
+                                model.visual.recordReply(model.conversation.reply, selection: selection)
+                            }
+                        }
                     } label: {
                         Label("Discuss this image", systemImage: "sparkles")
                             .font(.system(size: 14, weight: .semibold, design: .rounded))
@@ -68,12 +75,23 @@ struct LookTogetherView: View {
                             .foregroundStyle(KairoTheme.primary)
                     }
                     .buttonStyle(.plain)
-                    .disabled(busy || model.conversation.isSending
+                    .disabled(busy || !model.conversation.canSubmit
                               || model.visual.attachmentID == nil
-                              || question.trimmingCharacters(in: .whitespaces).isEmpty)
+                              || question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                              || question.trimmingCharacters(in: .whitespacesAndNewlines).count > 16_000)
                     if model.conversation.isSending { ProgressView().tint(KairoTheme.primary) }
-                    if !model.conversation.reply.isEmpty {
-                        Text(model.conversation.reply).textSelection(.enabled)
+                    if !model.conversation.status.isEmpty {
+                        Text(model.conversation.status).font(.caption).foregroundStyle(KairoTheme.chrome)
+                    }
+                    if model.conversation.hasPendingTurn && !model.conversation.isSending {
+                        Button("Check pending reply in Conversation") { model.destination = .conversation }
+                    }
+                    if question.trimmingCharacters(in: .whitespacesAndNewlines).count > 16_000 {
+                        Text("Questions can contain up to 16,000 characters.")
+                            .font(.caption).foregroundStyle(KairoTheme.warn)
+                    }
+                    if !model.visual.discussionReply.isEmpty {
+                        Text(model.visual.discussionReply).textSelection(.enabled)
                             .font(.system(size: 14, design: .rounded))
                             .foregroundStyle(KairoTheme.prose)
                     }

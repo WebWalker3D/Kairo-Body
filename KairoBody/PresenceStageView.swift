@@ -24,6 +24,7 @@ struct PresenceStageView: View {
                     header
                     Spacer(minLength: 0)
                     if !composerFocused {
+                        ResponseActivityView().frame(maxWidth: 640).padding(.bottom, 12)
                         quickActions.padding(.bottom, 14)
                     }
                     if let invitation = model.invitations.invitation {
@@ -159,7 +160,6 @@ struct PresenceStageView: View {
             }.accessibilityLabel("Output: \(model.conversation.outputDestination.rawValue)")
             Button {
                 let text = model.conversation.draft
-                model.conversation.draft = ""
                 composerFocused = false
                 model.body.noteUserActivity()
                 Task { await model.conversation.send(text) }
@@ -179,12 +179,16 @@ struct PresenceStageView: View {
     }
 
     private var canSend: Bool {
-        !model.conversation.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && model.conversation.draft.trimmingCharacters(in: .whitespacesAndNewlines).count <= 16_000 && !model.conversation.isSending
+        !model.conversation.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && model.conversation.draft.trimmingCharacters(in: .whitespacesAndNewlines).count <= 16_000 && model.conversation.canSubmit
     }
 
     private var bodyHeadline: String {
         // A server-applied display act carries its own headline; it wins over
         // the derived phase label until the next expression state arrives.
+        if model.settings.echoTranscriptVisible, model.feed.connectionTrouble == nil,
+           let turn = model.feed.turns.last, turn.status == "waiting_permission" {
+            return "approval needed"
+        }
         let applied = model.body.display
         if applied.headline != "Kairo", !applied.headline.isEmpty {
             return applied.detail.isEmpty ? applied.headline : "\(applied.headline) — \(applied.detail)"
@@ -206,10 +210,11 @@ struct PresenceStageView: View {
                    enabled: model.echo.state.canReplay()) {
                 model.echo.requestReplay()
             }
-            action("Speak here", "speaker.wave.2",
-                   enabled: model.ring.dotFresh && model.echo.state.activity?.replayAvailable == true) {
-                // The Dot's answer already lives in the shared transcript;
-                // replaying it through the iPad voice is deliberate.
+            action("Read latest shared answer", "speaker.wave.2",
+                   enabled: model.settings.echoTranscriptVisible && model.feed.connectionTrouble == nil &&
+                   model.feed.turns.last?.settledStatus == "completed") {
+                // This explicitly reads the shown shared answer, which may
+                // originate on any surface. Dot replay remains a separate act.
                 if let last = model.feed.turns.last(where: { $0.settledStatus == "completed" }) {
                     _ = model.speech.speak(last.answer)
                 }

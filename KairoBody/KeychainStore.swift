@@ -34,17 +34,14 @@ enum KeychainStore {
     }
 
     static func set(_ value: String, service: String, account: String, operations: Operations = .system) {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
-        operations.delete(query)
-        guard !value.isEmpty else { return }
-        var add = query
-        add[kSecValueData as String] = Data(value.utf8)
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-        operations.add(add)
+        if value.isEmpty {
+            let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                                      kSecAttrService as String: service,
+                                      kSecAttrAccount as String: account]
+            _ = operations.delete(query)
+        } else {
+            try? setChecked(value, service: service, account: account, operations: operations)
+        }
     }
 
     static func setChecked(_ value: String, service: String, account: String, operations: Operations = .system) throws {
