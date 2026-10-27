@@ -11,7 +11,7 @@ import UIKit
 final class AppModel: ObservableObject {
     let approvals: ApprovalClient
     let systems = SystemsClient()
-    let settings = AppSettings()
+    let settings: AppSettings
     let sensors = SensorManager()
     let pairing = PairingClient()
     let feed: TranscriptFeedClient
@@ -53,19 +53,20 @@ final class AppModel: ObservableObject {
         var id: String { rawValue }
     }
 
-    init(feed: TranscriptFeedClient? = nil, approvals: ApprovalClient? = nil, deliveryRequest: SurfaceDeliveryClient.Request? = nil,
+    init(http: KairoHTTP = KairoHTTP(), appSettings: AppSettings? = nil,
+         pendingStore: PendingTurnStore = PendingTurnStore(), feed: TranscriptFeedClient? = nil, approvals: ApprovalClient? = nil, deliveryRequest: SurfaceDeliveryClient.Request? = nil,
          surfaceUnobscured: @escaping @MainActor () -> Bool = { SurfaceVisibility.isUnobscured() }) {
+        self.settings = appSettings ?? AppSettings()
         self.feed = feed ?? TranscriptFeedClient()
         self.approvals = approvals ?? ApprovalClient()
         self.surfaceUnobscured = surfaceUnobscured
         AppConfig.provisionOnFirstLaunch()
-        let http = KairoHTTP()
         camera = CameraCaptureService()
         speech = SpeechService(http: http)
         body = BodyClient(settings: settings, sensors: sensors, speech: speech, camera: camera)
-        conversation = ConversationClient(settings: settings, speech: speech, http: http)
+        conversation = ConversationClient(settings: settings, speech: speech, http: http, pendingStore: pendingStore)
         surfaceDelivery = SurfaceDeliveryClient(request: deliveryRequest ?? { path, body in
-            try await http.agentObject(path, method: body == nil ? "GET" : "POST", body: body)
+            try await http.agentObject(path, method: body == nil ? "GET" : "POST", body: body, timeout: 8)
         })
         body.applyDisplay = { [weak self] state in
             await self?.applyStageDisplay(state.surfaceText) ?? false
@@ -393,7 +394,8 @@ final class AppModel: ObservableObject {
     func clearStageDisplay() { stageDisplayText = nil; acknowledgedDisplayID = nil; stageDisplayID = UUID() }
 
     func acceptInvitationIntoConversation() async {
-        guard let text = await invitations.accept() else { return }
-        await conversation.send(text)
+        guard conversation.canSubmit, let invitation = await invitations.accept() else { return }
+        destination = .conversation
+        await conversation.send(invitation.text, attachmentSessionID: invitation.sourceSessionID)
     }
 }

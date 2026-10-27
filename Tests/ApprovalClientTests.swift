@@ -49,7 +49,7 @@ final class ApprovalClientTests: XCTestCase {
     }
 
     func testMalformedOrTruncatedRequestCannotBeDecided() async {
-        for value: Any in [true, -1, 0, 1.5, "1"] {
+        for value in [true, -1, 0, 1.5, "1"] as [Any] {
             let client = ApprovalClient(ownerProof: { self.proof }, request: { _, _, _ in self.snapshot(id: value) })
             await client.refresh(jobID: "job_example")
             XCTAssertNil(client.approval)

@@ -77,6 +77,21 @@ final class VoiceInputService: ObservableObject {
         refresh()
     }
 
+    var awaitingResponse: Bool { conversationBusy || waitingForReply }
+
+    /// The speech recognizer hands off one completed utterance here. Keeping
+    /// this boundary explicit also lets microphone lifecycle run independently
+    /// of a particular recognizer implementation.
+    func submitCapturedCommand(_ command: String) {
+        guard !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        lastCommand = command
+        heardText = ""
+        waitingForReply = true
+        stopListening()
+        status = "Sending to Kairo…"
+        onCommand?(command)
+    }
+
     func responseFinished() {
         guard !conversationBusy else { return }
         waitingForReply = false
@@ -94,7 +109,7 @@ final class VoiceInputService: ObservableObject {
             status = "Voice wake off"
             return
         }
-        guard !conversationBusy, !waitingForReply else {
+        guard !awaitingResponse else {
             stopListening()
             status = "Kairo is responding"
             return
@@ -289,12 +304,7 @@ final class VoiceInputService: ObservableObject {
         let now = ProcessInfo.processInfo.systemUptime
         let wasAwake = capture.isAwake
         if let command = capture.completedCommand(at: now) {
-            lastCommand = command
-            heardText = ""
-            waitingForReply = true
-            stopListening()
-            status = "Sending to Kairo…"
-            onCommand?(command)
+            submitCapturedCommand(command)
         } else if wasAwake && !capture.isAwake {
             restartListening()
         } else if !capture.isAwake, now - listeningSince > 45 {

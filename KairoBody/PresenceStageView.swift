@@ -137,7 +137,13 @@ struct PresenceStageView: View {
         .gesture(contactGesture(in: side))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Kairo presence. \(bodyHeadline)")
-        .accessibilityHint("Touch sends a contact observation to Kairo")
+        .accessibilityHint("Activate to send a contact observation to Kairo")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction {
+            model.sensors.recordTouchBegan(id: "accessible-contact", x: 0.5, y: 0.5)
+            model.sensors.recordTouchEnded(id: "accessible-contact", x: 0.5, y: 0.5)
+            model.bodyContactEnded(durationMs: 100, pathLength: 0, cancelled: false)
+        }
     }
 
     private var composer: some View {
@@ -312,7 +318,7 @@ struct InvitationCard: View {
                         .background(Capsule().fill(KairoTheme.bond.opacity(0.16)))
                         .overlay(Capsule().stroke(KairoTheme.bond.opacity(0.5)))
                         .foregroundStyle(KairoTheme.bond)
-                }.buttonStyle(.plain)
+                }.buttonStyle(.plain).disabled(!model.invitations.canRespond || !model.conversation.canSubmit)
                 Button {
                     Task { await model.invitations.dismiss() }
                 } label: {

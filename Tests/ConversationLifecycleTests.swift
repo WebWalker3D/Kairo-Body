@@ -73,3 +73,67 @@ final class ConversationLifecycleTests: XCTestCase {
         XCTAssertEqual(store.load(), original)
     }
 }
+
+extension ConversationLifecycleTests {
+    func testKnownJobRecoveryPollsWithoutResubmitting() async {
+        let store = PendingTurnStore(defaults: suite)
+        var turn = PendingTurn.new(sessionID: "session_fixture", text: "Original", attachmentIDs: [], outputDestination: "silent")
+        turn.jobID = "job_original"; store.save(turn)
+        var posts = 0
+        let client = make(JobTracker(request: { path, method, _ in
+            if method == "POST" { posts += 1 }
+            XCTAssertEqual(path, "api/jobs/job_original?compact=1")
+            return ["settled_status": "completed", "settled_text": "Recovered answer"]
+        }))
+        await client.recoverPendingTurn()
+        XCTAssertEqual(posts, 0)
+        XCTAssertEqual(client.reply, "Recovered answer")
+        XCTAssertFalse(client.hasPendingTurn)
+    }
+
+    func testStoppedUnknownSubmissionIsLookedUpButNeverPostedAgain() async {
+        let store = PendingTurnStore(defaults: suite)
+        var turn = PendingTurn.new(sessionID: "session_fixture", text: "Stopped", attachmentIDs: [], outputDestination: "silent")
+        turn.cancelRequested = true; store.save(turn)
+        var methods: [String] = []
+        let client = make(JobTracker(request: { path, method, _ in
+            methods.append(method)
+            XCTAssertTrue(path.contains("idempotency_key="))
+            return [[String: Any]]()
+        }))
+        await client.recoverPendingTurn()
+        XCTAssertEqual(methods, ["GET"])
+        XCTAssertEqual(store.load(), turn)
+        XCTAssertEqual(client.pendingRecovery, .unconfirmed)
+        XCTAssertFalse(client.canSubmit)
+    }
+
+    func testForegroundRecoveryCannotStartASecondWatcher() async {
+        let store = PendingTurnStore(defaults: suite)
+        var turn = PendingTurn.new(sessionID: "session_fixture", text: "Original", attachmentIDs: [], outputDestination: "silent")
+        turn.jobID = "job_original"; store.save(turn)
+        let entered = expectation(description: "watching")
+        var release: CheckedContinuation<[String: Any], Never>?
+        var reads = 0
+        let client = make(JobTracker(request: { _, _, _ in
+            reads += 1
+            return await withCheckedContinuation { release = $0; entered.fulfill() }
+        }))
+        let first = Task { await client.recoverPendingTurn() }
+        await fulfillment(of: [entered], timeout: 2)
+        await client.recoverPendingTurn()
+        XCTAssertEqual(reads, 1)
+        release?.resume(returning: ["settled_status": "completed", "settled_text": "One answer"])
+        await first.value
+        XCTAssertEqual(client.reply, "One answer")
+    }
+
+    func testDefinitiveSubmissionFailureRestoresUnsentDraft() async {
+        let client = make(JobTracker(request: { _, _, _ in throw HTTPStatusError(status: 403) }))
+        client.draft = "Keep my question"
+        await client.send(client.draft)
+        XCTAssertEqual(client.draft, "Keep my question")
+        XCTAssertFalse(client.hasPendingTurn)
+        XCTAssertNotNil(client.error)
+    }
+}

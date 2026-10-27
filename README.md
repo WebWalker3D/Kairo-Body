@@ -5,7 +5,7 @@ Kairo's iPad body endpoint: a dependency-free iPadOS 17 SwiftUI + Metal app
 `icu.kairo.body`. This public repository is the source of record for the
 installed body app; the server lives in the private novexai repository.
 
-Kairo Body 3.1 (v3.1.0, build 57) replaces the 1.0.x MVP line in place: same
+Kairo Body 3.2 (v3.2.0, build 58) replaces the 1.0.x MVP line in place: same
 bundle id, same Keychain service/accounts (`icu.kairo.body` bearer-token /
 agent-token, `icu.kairo.body.owner` paired-owner-proof), same UserDefaults
 identity (`echoSessionID` and friends), endpoint id `ipad-pro-2017`. A
@@ -76,7 +76,7 @@ Dot's endpoint id (`echomuse-rs03qr`) is a fixed deployment constant in
 
 GitHub Actions (`build-ipa.yml`) runs the unit suite on an iPad simulator,
 captures visual smoke screenshots, builds the unsigned device app, asserts
-bundle id, version 3.1.0/build 57, permission strings and that no personal
+bundle id, version 3.2.0/build 58, permission strings and that no personal
 provisioning was baked, then uploads `KairoBody.ipa`.
 
 On a Mac directly:
@@ -159,3 +159,32 @@ Reduce Motion freezes procedural motion while retaining real state updates.
 CI includes the complete unit suite, portrait/landscape navigation screenshots,
 and an unsigned device build. Hardware sensor, audio and performance acceptance
 still requires installing the replacement IPA on the iPad.
+
+
+## 3.2 — Response and recovery overhaul
+
+The main stage observes shared questions from the Dot and other owner surfaces,
+shows elapsed time and reported work, distinguishes permission waits from
+inference, and previews settled answers. This follows the shared-preview privacy
+setting. Observing a response never claims delivery or speaks it automatically.
+
+A pending approval can be reviewed in full and allowed once or denied explicitly.
+The app never sends an automatic decision, never offers a persistent grant, and
+rejects stale, truncated or changed requests. An accepted decision means queued,
+not completed. These endpoints retain the server's existing bearer authorization;
+local pairing is an additional app guard, not a stronger server permission model.
+
+The shared feed now continues after its first refresh. Submission cancellation,
+relaunch recovery, private foreground recovery, voice rearming, image-answer
+binding and checked credential replacement have regression coverage. Private
+recovery remains memory-only: app termination clears the local private recovery
+handle. Ordinary shared requests retain their existing durable idempotency keys.
+
+Install the replacement IPA over the existing app using the same signing identity.
+The bundle and Keychain/UserDefaults identifiers are unchanged. Do not uninstall
+first if you want to retain application settings.
+
+Simulator tests use synthetic transport responses, including complete question to
+settled-answer flows. They do not certify real microphone/camera behavior, actual
+model latency, or performance on the physical iPad. See the assessment for evidence
+and remaining operational limits.

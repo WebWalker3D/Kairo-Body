@@ -194,7 +194,7 @@ final class ConversationClient: ObservableObject {
             if current == self.generation { self.isSending = false }
         }
         await responseTask?.value
-        return true
+        return current == generation
     }
 
     private func settle(_ turn: PendingTurn, jobID: String, generation current: Int) async throws {

@@ -150,7 +150,12 @@ struct PrivateRoomView: View {
                         .foregroundStyle(KairoTheme.prose)
                     Button {
                         guard let text = draft.takeForSubmission(busy: model.privateRoom.busy || model.privateRoom.hasPendingTurn) else { return }
-                        Task { await model.privateRoom.send(text) }
+                        Task {
+                            await model.privateRoom.send(text)
+                            if scenePhase == .active, model.pairing.isPaired,
+                               model.privateRoom.error != nil, !model.privateRoom.hasPendingTurn,
+                               draft.text.isEmpty { draft.text = text }
+                        }
                     } label: {
                         Image(systemName: "arrow.up.circle.fill").font(.system(size: 26))
                     }

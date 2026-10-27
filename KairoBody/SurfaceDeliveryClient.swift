@@ -13,6 +13,17 @@ final class SurfaceDeliveryClient: ObservableObject {
     var stopSpeech: () -> Void = {}
     private let request: Request
     private var seen = Set<String>()
+    private struct Receipt: Equatable {
+        let job: String
+        let target: String
+        let success: Bool
+        let detail: String
+        let owner: String
+        var key: String { target + ":" + job }
+    }
+    @Published private var pendingReceipts: [String: Receipt] = [:]
+    var hasUnconfirmedReceipts: Bool { !pendingReceipts.isEmpty }
+    private var reporting = Set<String>()
     private var active: (job: String, target: String)?
     private var generation = UUID()
     private var foreground = true
@@ -26,6 +37,7 @@ final class SurfaceDeliveryClient: ObservableObject {
     func setForeground(_ value: Bool) {
         foreground = value
         if !value { stop() }
+        else { Task { await retryReceipts() } }
     }
 
     func setDisplayVisible(_ value: Bool) {
@@ -72,9 +84,12 @@ final class SurfaceDeliveryClient: ObservableObject {
             presenceTask?.cancel(); presenceTask = nil
             return
         }
-        guard destination != "silent", ["ipad_display", "ipad_speech"].contains(destination),
-              !busy, !seen.contains(jobID), !jobID.isEmpty, WireID.valid(jobID) else { return }
-        busy = true; error = nil; seen.insert(jobID)
+        guard !seen.contains(jobID), WireID.valid(jobID) else { return }
+        guard !busy else {
+            error = "Another answer is still playing or being delivered. This answer remains in Conversation."
+            return
+        }
+        busy = true; error = nil
         let run = generation
         do {
             let payload = try await request("api/surfaces/\(destination)/deliveries/\(jobID)/claim", [:])
@@ -82,6 +97,7 @@ final class SurfaceDeliveryClient: ObservableObject {
                 try? await report(jobID, destination, success: false, detail: "device left foreground during claim")
                 return
             }
+            seen.insert(jobID)
             active = (jobID, destination)
             guard payload["job_id"] as? String == jobID, payload["target"] as? String == destination,
                   payload["kind"] as? String == "text", let text = payload["text"] as? String,
@@ -127,9 +143,46 @@ final class SurfaceDeliveryClient: ObservableObject {
         if generation == run { busy = false; presenceTask?.cancel(); presenceTask = nil }
     }
 
+    /// Resends only an already-observed outcome, never a claim or output act.
+    func retryReceipts() async {
+        guard foreground else { return }
+        error = nil
+        for item in Array(pendingReceipts.values) {
+            do { try await sendReceipt(item) }
+            catch { self.error = "The delivery outcome receipt is still unconfirmed. " + error.localizedDescription }
+        }
+    }
+
     private func report(_ job: String, _ target: String, success: Bool, detail: String) async throws {
-        _ = try await request("api/surfaces/\(target)/deliveries/\(job)/result",
-            ["status": success ? "delivered" : "failed", "receipt": success ? String(detail.prefix(500)) : "",
-             "error": success ? "" : String(detail.prefix(500))])
+        let item = Receipt(job: job, target: target, success: success,
+                           detail: String(detail.prefix(500)), owner: AppConfig.ownerProof)
+        pendingReceipts[item.key] = item
+        try await sendReceipt(item)
+    }
+
+    private func sendReceipt(_ item: Receipt) async throws {
+        guard !reporting.contains(item.key) else { return }
+        guard item.owner == AppConfig.ownerProof else {
+            pendingReceipts.removeValue(forKey: item.key)
+            return
+        }
+        reporting.insert(item.key)
+        defer { reporting.remove(item.key) }
+        for attempt in 0..<3 {
+            guard item.owner == AppConfig.ownerProof else {
+                pendingReceipts.removeValue(forKey: item.key)
+                return
+            }
+            do {
+                _ = try await request("api/surfaces/\(item.target)/deliveries/\(item.job)/result",
+                    ["status": item.success ? "delivered" : "failed",
+                     "receipt": item.success ? item.detail : "", "error": item.success ? "" : item.detail])
+                if pendingReceipts[item.key] == item { pendingReceipts.removeValue(forKey: item.key) }
+                return
+            } catch {
+                guard RequestFailure.kind(of: error) == .transient, attempt < 2 else { throw error }
+                try await Task.sleep(for: .seconds(Double(attempt + 1)))
+            }
+        }
     }
 }

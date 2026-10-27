@@ -64,6 +64,10 @@ struct ResponseActivityView: View {
                         HStack { Text(turn.active ? "View conversation" : "Read full conversation"); Spacer(); Image(systemName: "arrow.up.right") }
                     }.font(.caption.weight(.semibold))
                 }
+                if model.surfaceDelivery.hasUnconfirmedReceipts {
+                    Button("Retry delivery receipt") { Task { await model.surfaceDelivery.retryReceipts() } }
+                        .font(.caption)
+                }
                 if let error = model.surfaceDelivery.error {
                     Label(error, systemImage: "speaker.badge.exclamationmark")
                         .font(.caption).foregroundStyle(KairoTheme.warn)

@@ -16,28 +16,36 @@ struct BodyInvitation {
 final class InvitationClient: ObservableObject {
     @Published private(set) var invitation: BodyInvitation?
     @Published private(set) var canRespond = false
-    private let http: KairoHTTP
+    typealias Request = (String, String, [String: Any]?) async throws -> [String: Any]
+    private let request: Request
+    private let ownerProof: () -> String
     private var generation = UUID()
     private var refreshing = false
     private var expiryTask: Task<Void, Never>?
     private var displayed = Set<String>()
 
-    init(http: KairoHTTP = KairoHTTP()) { self.http = http }
+    init(http: KairoHTTP = KairoHTTP(), ownerProof: @escaping () -> String = { AppConfig.ownerProof },
+         request: Request? = nil) {
+        self.ownerProof = ownerProof
+        self.request = request ?? { path, method, body in
+            try await http.agentObject(path, method: method, body: body, timeout: 10)
+        }
+    }
 
     func refresh(foreground: Bool) async {
-        guard foreground, !AppConfig.ownerProof.isEmpty else { stop(); return }
+        guard foreground, PairingClient.validCredential(ownerProof()) else { stop(); return }
         guard !refreshing, invitation == nil else { return }
         let run = generation
         refreshing = true
         defer { if generation == run { refreshing = false } }
         do {
-            let response = try await http.agentObject("api/ipad/invitations", timeout: 10)
+            let response = try await request("api/ipad/invitations", "GET", nil)
             guard let proposal = response["invitation"] as? [String: Any],
                   let id = proposal["id"] as? String, !id.isEmpty, id.allSatisfy({ $0.isNumber && $0.isASCII }),
                   let text = proposal["text"] as? String, !text.isEmpty, text.count <= 500,
                   proposal["origin"] as? String == "kairo",
                   let source = proposal["source_event_id"] as? Int, source > 0,
-                  let session = proposal["session_id"] as? String, !session.isEmpty,
+                  let session = proposal["session_id"] as? String, WireID.valid(session),
                   let timestamp = proposal["expires_at"] as? String, let expires = BodyJSON.date(timestamp) else { return }
             guard generation == run else { await outcome(id, "cancelled"); return }
             guard expires > Date() else { await outcome(id, "expired"); return }
@@ -73,15 +81,14 @@ final class InvitationClient: ObservableObject {
         await outcome(item.id, "dismissed")
     }
 
-    /// Returns the invitation's own text so the room can continue the source
-    /// conversation directly.
-    func accept() async -> String? {
+    /// Preserve the source session along with the accepted invitation.
+    func accept() async -> BodyInvitation? {
         guard canRespond, let item = invitation, item.expiresAt > Date() else { stop(); return nil }
         let run = generation
         invitation = nil; canRespond = false; expiryTask?.cancel(); expiryTask = nil
         let accepted = await outcome(item.id, "answered")
         guard accepted, generation == run else { return nil }
-        return item.text
+        return item
     }
 
     func stop() {
@@ -93,8 +100,7 @@ final class InvitationClient: ObservableObject {
     @discardableResult
     private func outcome(_ id: String, _ status: String) async -> Bool {
         do {
-            let response = try await http.agentObject("api/ipad/invitations/\(id)/result",
-                                                      method: "POST", body: ["status": status], timeout: 10)
+            let response = try await request("api/ipad/invitations/\(id)/result", "POST", ["status": status])
             return response["accepted"] as? Bool == true
         } catch { return false }
     }
