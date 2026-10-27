@@ -13,7 +13,7 @@ final class AppModel: ObservableObject {
     let systems = SystemsClient()
     let settings: AppSettings
     let sensors = SensorManager()
-    let pairing = PairingClient()
+    let pairing: PairingClient
     let feed: TranscriptFeedClient
     let presentation = PresentationClient()
     let invitations: InvitationClient
@@ -33,6 +33,7 @@ final class AppModel: ObservableObject {
     @Published var exportedArtifact: URL?
     @Published private(set) var stageDisplayText: String?
     @Published private(set) var lastContactAt: Date?
+    @Published private(set) var dotPhaseObservedAt: Date?
     @Published private(set) var stageDisplayID = UUID()
     private var acknowledgedDisplayID: UUID?
     private var rootSurfaceVisible = false
@@ -53,9 +54,10 @@ final class AppModel: ObservableObject {
         var id: String { rawValue }
     }
 
-    init(http: KairoHTTP = KairoHTTP(), appSettings: AppSettings? = nil,
+    init(http: KairoHTTP = KairoHTTP(), pairingClient: PairingClient? = nil, appSettings: AppSettings? = nil,
          pendingStore: PendingTurnStore = PendingTurnStore(), invitations: InvitationClient? = nil, feed: TranscriptFeedClient? = nil, approvals: ApprovalClient? = nil, deliveryRequest: SurfaceDeliveryClient.Request? = nil,
          surfaceUnobscured: @escaping @MainActor () -> Bool = { SurfaceVisibility.isUnobscured() }) {
+        self.pairing = pairingClient ?? PairingClient()
         self.invitations = invitations ?? InvitationClient(http: http)
         self.settings = appSettings ?? AppSettings()
         self.feed = feed ?? TranscriptFeedClient()
@@ -89,16 +91,16 @@ final class AppModel: ObservableObject {
             if !busy && !self.speech.isBusy { self.voice.responseFinished() }
         })
         forwardCancellables.append(echo.$state.map { $0.activity?.phase }.removeDuplicates().sink { [weak self] phase in
-            guard let self, self.isForeground, phase != nil else { return }
-            Task { await self.feed.refresh() }
-        })
-        forwardCancellables.append(self.feed.$turns.sink { [weak self] turns in
             guard let self else { return }
-            guard self.isForeground, self.pairing.isPaired,
-                  let turn = turns.last, turn.status == "waiting_permission" else {
-                self.approvals.stop(); return
-            }
-            Task { await self.approvals.refresh(jobID: turn.id) }
+            self.dotPhaseObservedAt = phase == nil ? nil : Date()
+            guard self.isForeground, phase != nil else { return }
+            Task { if self.isForeground { await self.feed.refresh() } }
+        })
+        forwardCancellables.append(self.feed.$turns.sink { [weak self] _ in
+            Task { @MainActor in await self?.refreshApprovalTracking() }
+        })
+        forwardCancellables.append(conversation.$observedStatus.removeDuplicates().sink { [weak self] _ in
+            Task { @MainActor in await self?.refreshApprovalTracking() }
         })
         speech.onPlaybackStateChange = { [weak self] busy in
             guard let self else { return }
@@ -106,6 +108,16 @@ final class AppModel: ObservableObject {
             if !busy && !self.conversation.isSending { self.voice.responseFinished() }
             self.objectWillChange.send()
         }
+    }
+
+    private func refreshApprovalTracking() async {
+        guard isForeground, pairing.isPaired else { approvals.stop(); return }
+        if conversation.isSending, conversation.observedStatus == "waiting_permission",
+           !conversation.responseJobID.isEmpty {
+            await approvals.refresh(jobID: conversation.responseJobID)
+        } else if let turn = feed.turns.last, turn.status == "waiting_permission" {
+            await approvals.refresh(jobID: turn.id)
+        } else { approvals.stop() }
     }
 
     private let camera: CameraCaptureService
@@ -395,8 +407,8 @@ final class AppModel: ObservableObject {
     func clearStageDisplay() { stageDisplayText = nil; acknowledgedDisplayID = nil; stageDisplayID = UUID() }
 
     func acceptInvitationIntoConversation() async {
-        guard conversation.canSubmit, let invitation = await invitations.accept() else { return }
+        guard conversation.canSubmit else { return }
         destination = .conversation
-        await conversation.send(invitation.text, attachmentSessionID: invitation.sourceSessionID)
+        await conversation.acceptInvitation(from: invitations)
     }
 }

@@ -30,6 +30,7 @@ enum RequestFailure {
     }
 
     static func kind(of error: Error) -> RequestFailureKind {
+        if error is SubmissionUnconfirmed { return .transient }
         if let status = error as? HTTPStatusError { return kind(status: status.status) }
         if error is MalformedResponse { return .transient }
         if let url = error as? URLError {

@@ -69,6 +69,7 @@ final class ConversationClient: ObservableObject {
     @Published private(set) var submittedText = ""
     @Published private(set) var submittedAt: Date?
     @Published private(set) var lastObservedAt: Date?
+    @Published private(set) var observedStatus = ""
     @Published var draft = ""
     @Published var outputDestination: OutputDestination = .automatic
 
@@ -110,6 +111,7 @@ final class ConversationClient: ObservableObject {
         guard !isSending, let turn = pendingStore.load() else { return }
         isSending = true
         error = nil
+        observedStatus = ""
         submittedText = turn.text
         submittedAt = turn.submittedAt
         status = turn.cancelRequested == true ? "Checking the stopped request…" : "Checking your previous message…"
@@ -158,6 +160,7 @@ final class ConversationClient: ObservableObject {
         submittedText = trimmed
         submittedAt = Date()
         lastObservedAt = nil
+        observedStatus = ""
         lastJobID = ""
         if draft.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed { draft = "" }
         promptProgress = nil
@@ -197,6 +200,28 @@ final class ConversationClient: ObservableObject {
         return current == generation
     }
 
+    /// Reserve the local submission slot while the server acknowledges the
+    /// invitation. Other inputs cannot take the slot during this await.
+    func acceptInvitation(from invitations: InvitationClient) async {
+        guard canSubmit else { return }
+        generation += 1
+        let current = generation
+        isSending = true
+        stopRequested = false
+        status = "Opening the invitation…"
+        observedStatus = ""; lastJobID = ""; submittedText = ""; submittedAt = Date()
+        error = nil
+        let item = await invitations.accept()
+        guard current == generation else { return }
+        isSending = false
+        guard let item else {
+            status = ""
+            error = "Invitation is no longer available."
+            return
+        }
+        await send(item.text, attachmentSessionID: item.sourceSessionID)
+    }
+
     private func settle(_ turn: PendingTurn, jobID: String, generation current: Int) async throws {
         let wait = try await tracker.waitForSettlement(jobID: jobID, since: turn.submittedAt,
             onConnectionChange: { connected in
@@ -205,10 +230,11 @@ final class ConversationClient: ObservableObject {
             }) { job in
             guard current == self.generation else { return }
             self.lastObservedAt = Date()
+            self.observedStatus = job["status"] as? String ?? "unknown"
             self.status = ResponseActivity.headline(status: job["status"] as? String ?? "unknown",
                                                      settled: job["settled_status"] as? String)
             // A completed answer never waits on optional progress telemetry.
-            guard job["settled_status"] == nil else { return }
+            guard !(job["settled_status"] is String) else { return }
             if let events = try? await self.http.agent("api/jobs/\(jobID)/events?tail=32", timeout: 3) as? [[String: Any]],
                current == self.generation {
                 self.promptProgress = events.compactMap(PromptTokenProgress.init(event:)).max(by: { $0.sequence < $1.sequence })
@@ -284,13 +310,15 @@ final class ConversationClient: ObservableObject {
     }
 
     func stopResponse() async {
+        // Playback is independent of the last remote cancellation. A second
+        // manually started utterance must always remain stoppable.
+        stopOutput?()
+        speech.stop()
         guard !stopRequested else { return }
         stopRequested = true
         generation += 1
         responseTask?.cancel()
         responseTask = nil
-        stopOutput?()
-        speech.stop()
         isSending = false
         guard var turn = pendingStore.load() else { status = "Stopped"; return }
         turn.cancelRequested = true
@@ -362,7 +390,7 @@ final class ConversationClient: ObservableObject {
         settings.sharedSessionID = ""
         clearPending()
         reply = ""
-        submittedText = ""; submittedAt = nil; lastObservedAt = nil
+        submittedText = ""; submittedAt = nil; lastObservedAt = nil; observedStatus = ""
         error = nil
         status = ""
         isSending = false

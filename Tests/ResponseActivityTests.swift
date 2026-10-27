@@ -28,13 +28,24 @@ final class ResponseSceneTests: XCTestCase {
         let feed = TranscriptFeedClient(ownerProof: { "kbp_" + String(repeating: "z", count: 40) },
             agentAvailable: { true }, read: { _, _ in
                 var job: [String: Any] = ["id": "job_fixture_dot_turn", "session_id": "fixture_dot_session",
-                    "status": state, "prompt": "How do you feel?", "created_at": "2026-10-27T00:37:10Z",
+                    "status": state, "prompt": "How do you feel?", "created_at": ISO8601DateFormatter().string(from: Date().addingTimeInterval(-52)),
                     "metadata_json": ["client": "echomuse", "surface_kind": "dot"],
                     "events": [["type": "ToolStarted", "name": "inspect_self_state", "seq": 1]]]
                 if state == "completed" { job["settled_status"] = "completed"; job["settled_text"] = "I feel attentive. I am here with you." }
                 return (.fresh, ["schema_version": 1, "read_only": true, "turns": [job]], nil)
             })
-        let model = AppModel(feed: feed)
+        let suiteName = "ResponseSceneFixture.\(UUID())"
+        let suite = UserDefaults(suiteName: suiteName)!
+        defer { suite.removePersistentDomain(forName: suiteName) }
+        let proof = "kbp_" + String(repeating: "z", count: 40)
+        let approvals = ApprovalClient(ownerProof: { proof }, request: { _, method, _ in
+            XCTAssertEqual(method, "GET", "Scene capture never sends a decision")
+            return ["approvals": [["job_id": "job_fixture_dot_turn", "request_id": 1,
+                                   "description": "Inspect current internal state for this question", "scope": "tool", "truncated": false]]]
+        })
+        let model = AppModel(pairingClient: PairingClient(defaults: suite, readProof: { proof }),
+                             appSettings: AppSettings(defaults: suite), pendingStore: PendingTurnStore(defaults: suite),
+                             feed: feed, approvals: approvals)
         let oldVisibility = model.settings.echoTranscriptVisible
         defer { model.settings.echoTranscriptVisible = oldVisibility; feed.stop() }
         model.settings.echoTranscriptVisible = true
@@ -54,6 +65,10 @@ final class ResponseSceneTests: XCTestCase {
             await feed.refresh()
             try await Task.sleep(for: .milliseconds(250))
             XCTAssertEqual(feed.turns.last?.status, phase)
+            if phase == "waiting_permission" {
+                await approvals.refresh(jobID: "job_fixture_dot_turn")
+                XCTAssertNotNil(approvals.approval)
+            }
             window.layoutIfNeeded()
             host.view.layoutIfNeeded()
             let image = UIGraphicsImageRenderer(bounds: host.view.bounds).image { _ in

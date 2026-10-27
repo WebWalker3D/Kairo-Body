@@ -14,20 +14,34 @@ struct ResponseActivityView: View {
         guard showShared, model.settings.echoTranscriptVisible else { return nil }
         return model.feed.turns.last
     }
+    private var dotActivity: DotActivity? {
+        guard showShared, sharedTurn?.active != true, let activity = model.echo.state.activity,
+              activity.expiresAt > Date(), ["thinking", "listening", "speaking"].contains(activity.phase) else { return nil }
+        return activity
+    }
+    private var dotDetail: String {
+        if !model.settings.echoTranscriptVisible { return "Shared conversation details are hidden in Settings." }
+        if model.pairing.isPaired { return "Waiting for shared conversation details…" }
+        return "Pair this iPad to see the question, progress, approval requests and answer here."
+    }
+    private var localNeedsApproval: Bool { model.conversation.observedStatus == "waiting_permission" }
     private var feedFresh: Bool {
         model.feed.following && model.feed.connectionTrouble == nil &&
         model.feed.lastUpdatedAt.map { Date().timeIntervalSince($0) < 30 } == true
     }
 
     var body: some View {
-        if localVisible || sharedTurn != nil || model.surfaceDelivery.error != nil {
+        if localVisible || sharedTurn != nil || dotActivity != nil || model.surfaceDelivery.error != nil {
             VStack(alignment: .leading, spacing: 10) {
                 if localVisible {
                     activity(title: model.conversation.error == nil ? model.conversation.status : "Response interrupted",
                              detail: model.conversation.error ?? localDetail,
-                             source: "THIS IPAD", active: model.conversation.isSending,
-                             blocked: model.conversation.error != nil || model.conversation.pendingRecovery != nil,
+                             source: "THIS IPAD", active: model.conversation.isSending && !localNeedsApproval,
+                             blocked: localNeedsApproval || model.conversation.error != nil || model.conversation.pendingRecovery != nil,
                              since: model.conversation.submittedAt)
+                    if localNeedsApproval, !model.conversation.responseJobID.isEmpty {
+                        ApprovalReviewView(jobID: model.conversation.responseJobID)
+                    }
                     if !model.conversation.submittedText.isEmpty {
                         Text(model.conversation.submittedText).lineLimit(2)
                             .font(.system(size: 14)).foregroundStyle(KairoTheme.prose)
@@ -66,6 +80,15 @@ struct ResponseActivityView: View {
                         HStack { Text(turn.active ? "View conversation" : "Read full conversation"); Spacer(); Image(systemName: "arrow.up.right") }
                     }.font(.caption.weight(.semibold))
                 }
+                if let dot = dotActivity {
+                    activity(title: dot.phase == "listening" ? "Listening on the Dot" : (dot.phase == "speaking" ? "Kairo is speaking on the Dot" : "The Dot reports Kairo is working"),
+                             detail: dotDetail,
+                             source: "DOT · LIVE ACTIVITY", active: dot.phase == "thinking", blocked: false,
+                             since: model.dotPhaseObservedAt)
+                    if !model.pairing.isPaired {
+                        Button("Pair in Private") { model.destination = .privateRoom }.font(.caption.weight(.semibold))
+                    }
+                }
                 if model.surfaceDelivery.hasUnconfirmedReceipts {
                     Button("Retry delivery receipt") { Task { await model.surfaceDelivery.retryReceipts() } }
                         .font(.caption)
@@ -89,6 +112,7 @@ struct ResponseActivityView: View {
     }
 
     private var localDetail: String {
+        if localNeedsApproval { return ResponseActivity.detail(status: "waiting_permission", progress: nil, tools: []) }
         if let progress = model.conversation.promptProgress {
             return ResponseActivity.detail(status: "running", progress: progress, tools: [])
         }

@@ -31,7 +31,7 @@ struct ApprovalReviewView: View {
             }
         }
         .task(id: jobID) {
-            guard model.pairing.isPaired else { return }
+            guard model.isForeground, model.pairing.isPaired else { return }
             await model.approvals.refresh(jobID: jobID)
         }
         .sheet(isPresented: $showingReview) {

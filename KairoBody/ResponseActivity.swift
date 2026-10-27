@@ -3,7 +3,7 @@ import Foundation
 /// A description of observed job state, never an estimate of answer completion.
 enum ResponseActivity {
     static func shouldShowShared(localJobID: String, sharedJobID: String, localHasStatus: Bool) -> Bool {
-        !localHasStatus
+        !localHasStatus || localJobID != sharedJobID
     }
 
     static func headline(status: String, settled: String?) -> String {

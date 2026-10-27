@@ -18,7 +18,11 @@ final class TranscriptFeedClient: ObservableObject {
     /// The iPad is a surface, not a separate Kairo: a Discord answer is the
     /// body's own answer to show.
     @Published private(set) var lastAnsweredAt: Date?
-    var processing: Bool { following && turns.contains(where: \.active) }
+    var processing: Bool {
+        following && connectionTrouble == nil &&
+        lastUpdatedAt.map { Date().timeIntervalSince($0) < 30 } == true &&
+        turns.contains(where: \.active)
+    }
 
     typealias ConditionalRead = @MainActor (String, String?) async throws
         -> (response: ObserverResponse, object: [String: Any]?, validator: String?)
@@ -111,8 +115,11 @@ final class TranscriptFeedClient: ObservableObject {
     /// moment a newly settled answer is first observed so the body can beat
     /// it briefly. The first read only establishes the baseline: history that
     /// settled before this feed started is not a fresh answer.
-    private func noteAnswers(in turns: [ConversationTurn]) {
-        guard let newest = turns.compactMap({ $0.settledStatus == nil ? nil : $0.createdAt })
+    private func noteAnswers(in turns: [ConversationTurn], previouslyActive: Set<String>) {
+        if turns.contains(where: { previouslyActive.contains($0.id) && $0.settledStatus == "completed" && !$0.answer.isEmpty }) {
+            lastAnsweredAt = Date()
+        }
+        guard let newest = turns.compactMap({ $0.settledStatus == "completed" && !$0.answer.isEmpty ? $0.createdAt : nil })
             .max() else { return }
         let previous = lastSettledCreatedAt
         lastSettledCreatedAt = newest
@@ -152,9 +159,10 @@ final class TranscriptFeedClient: ObservableObject {
                       let jobs = snapshot["turns"] as? [[String: Any]], jobs.count <= 84 else {
                     throw MalformedResponse()
                 }
+                let previouslyActive = Set(turns.filter(\.active).map(\.id))
                 turns = jobs.compactMap { ConversationTurn(observedJob: $0) }
                     .sorted { $0.createdAt < $1.createdAt }
-                noteAnswers(in: turns)
+                noteAnswers(in: turns, previouslyActive: previouslyActive)
                 liveState = LiveStateSnapshot(snapshot: snapshot)
                 observerValidator = etag
             case .authorizationLost:

@@ -61,6 +61,22 @@ final class TranscriptFeedTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(reads, 2)
         XCTAssertTrue(feed.following)
         XCTAssertFalse(feed.processing, "A settled answer must release the thinking state")
+        XCTAssertNotNil(feed.lastAnsweredAt, "A first observed active turn becoming complete is a fresh answer")
+    }
+
+    func testRetainedActiveTranscriptDoesNotClaimLiveWorkDuringOutage() async {
+        var offline = false
+        let feed = makeFeed { _, _ in
+            if offline { throw URLError(.timedOut) }
+            return (.fresh, self.snapshot(), "running")
+        }
+        defer { feed.stop() }
+        feed.followAllSurfaces(foreground: true)
+        await waitUntil("Initial live work") { feed.processing }
+        offline = true
+        await waitUntil("Outage observed") { feed.connectionTrouble != nil }
+        XCTAssertEqual(feed.turns.first?.status, "running", "History stays visible")
+        XCTAssertFalse(feed.processing, "Retained history is not fresh work evidence")
     }
 
     func testSameOwnerFollowDoesNotReplaceReadInFlight() async {

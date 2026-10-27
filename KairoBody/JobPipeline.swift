@@ -56,8 +56,11 @@ struct PendingTurnStore {
 /// Every submission attempt failed transiently and recovery by key found
 /// nothing reachable. The server may or may not hold the job; resending
 /// `turn` unchanged is safe either way.
-struct SubmissionUnconfirmed: Error, Equatable {
+struct SubmissionUnconfirmed: LocalizedError, Equatable {
     let turn: PendingTurn
+    var errorDescription: String? {
+        "Kairo has not confirmed this submission. The original message is retained; check it again without creating a duplicate."
+    }
 }
 
 enum JobWait {

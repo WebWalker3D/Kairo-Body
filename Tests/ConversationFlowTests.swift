@@ -139,3 +139,37 @@ extension ConversationFlowTests {
         XCTAssertEqual(postedPaths, ["/api/sessions/source_session/jobs"])
     }
 }
+
+extension ConversationFlowTests {
+    func testJSONNullSettlementStillReportsPermissionAndOptionalProgress() async throws {
+        let suiteName = "PermissionFlow.\(UUID())"
+        let suite = UserDefaults(suiteName: suiteName)!
+        defer { suite.removePersistentDomain(forName: suiteName); ConversationHTTPFixture.respond = nil }
+        var reads = 0
+        var eventReads = 0
+        ConversationHTTPFixture.respond = { request in
+            if request.httpMethod == "POST" { return (200, ["id": "job_permission"]) }
+            if request.url!.path.hasSuffix("/events") {
+                eventReads += 1
+                return (200, [["type": "PromptProgress", "processed": 123, "seq": 1]])
+            }
+            reads += 1
+            return reads == 1
+                ? (200, ["status": "waiting_permission", "settled_status": NSNull()])
+                : (200, ["status": "completed", "settled_status": "completed", "settled_text": "After explicit approval"])
+        }
+        let settings = AppSettings(defaults: suite)
+        settings.followEcho = false; settings.sharedSessionID = "session_fixture"
+        let client = ConversationClient(settings: settings, speech: SpeechService(), http: http(),
+                                       pendingStore: PendingTurnStore(defaults: suite))
+        client.outputDestination = .silent
+        var observed: [String] = []
+        let observation = client.$observedStatus.sink { observed.append($0) }
+        defer { observation.cancel() }
+        await client.send("A question")
+        XCTAssertTrue(observed.contains("waiting_permission"))
+        XCTAssertEqual(eventReads, 1, "Null settlement is active; completed answers skip optional event reads")
+        XCTAssertEqual(client.promptProgress?.processed, 123)
+        XCTAssertEqual(client.reply, "After explicit approval")
+    }
+}
