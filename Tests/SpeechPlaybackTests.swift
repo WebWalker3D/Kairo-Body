@@ -26,14 +26,10 @@ private final class SilentSpeechHTTP: URLProtocol {
 @MainActor
 final class SpeechPlaybackTests: XCTestCase {
     func testSpeechVisualBeginsAtPlayerStartAndEndsAtRealCompletionOrStop() async throws {
-        let previous = KeychainStore.read(service: AppConfig.keychainService, account: AppConfig.agentAccount)
-        try KeychainStore.setChecked("synthetic-speech-fixture", service: AppConfig.keychainService,
-                                    account: AppConfig.agentAccount)
-        defer { KeychainStore.set(previous ?? "", service: AppConfig.keychainService, account: AppConfig.agentAccount) }
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [SilentSpeechHTTP.self]
         let http = KairoHTTP(session: URLSession(configuration: config), credentials: { ("fixture", "") })
-        let speech = SpeechService(http: http)
+        let speech = SpeechService(http: http, credentialAvailable: { true })
         defer { speech.stop() }
         let started = expectation(description: "actual player started")
         let completed = expectation(description: "actual player finished")

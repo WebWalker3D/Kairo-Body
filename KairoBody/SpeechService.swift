@@ -11,6 +11,7 @@ final class SpeechService {
     var onPlaybackStateChange: ((Bool) -> Void)?
     var onAvailabilityChange: (() -> Void)?
     private let http: KairoHTTP
+    private let credentialAvailable: () -> Bool
     private var speechTask: Task<Void, Never>?
     private var pendingAudio: Task<Data, Error>?
     private var player: AVAudioPlayer?
@@ -20,8 +21,10 @@ final class SpeechService {
     var isBusy: Bool { speechTask != nil }
     private(set) var isPlaying = false
 
-    init(http: KairoHTTP = KairoHTTP()) {
+    init(http: KairoHTTP = KairoHTTP(),
+         credentialAvailable: @escaping () -> Bool = { !AppConfig.agentToken.isEmpty }) {
         self.http = http
+        self.credentialAvailable = credentialAvailable
     }
 
     @discardableResult
@@ -32,7 +35,7 @@ final class SpeechService {
             return false
         }
         let portions = Self.chunks(text)
-        guard !portions.isEmpty, !AppConfig.agentToken.isEmpty else {
+        guard !portions.isEmpty, credentialAvailable() else {
             onFailure?("This copy of Kairo was not provisioned with a voice credential.")
             return false
         }
