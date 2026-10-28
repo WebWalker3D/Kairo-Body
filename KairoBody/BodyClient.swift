@@ -22,6 +22,18 @@ final class BodyClient {
         var state = "awaiting state"
         var headline = "Kairo"
         var detail = "Waiting for Kairo's current expression"
+        /// Expression-only acts belong to the ring. Preserve arbitrary written
+        /// messages, even when they also carry a valid expression state.
+        var ringExpression: String? {
+            let mood = state.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let title = headline.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let description = detail.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard ["calm", "curious", "focused", "joyful", "concerned", "playful", "reflective", "resolute"].contains(mood),
+                  title.isEmpty || title == "kairo",
+                  description.isEmpty || description == "current expression: \(mood)" else { return nil }
+            return mood
+        }
+
         var surfaceText: String {
             [headline, state.capitalized, detail].filter { !$0.isEmpty }.joined(separator: "\n")
         }

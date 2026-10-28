@@ -18,6 +18,7 @@ struct RingMirrorState: Equatable {
     var posture: Posture = .idle
     var dotFresh = false
     var presentationFresh = false
+    var expressionAvailable = false
     var observedAt = Date()
 }
 
@@ -90,6 +91,7 @@ enum RingMirror {
 
         if let presentation, presentation.isFresh(at: now) {
             state.mood = presentation.expression ?? state.mood
+            state.expressionAvailable = presentation.expression != nil
             switch presentation.phase {
             case "background":
                 if state.phase == .idle { state.phase = .reflecting }

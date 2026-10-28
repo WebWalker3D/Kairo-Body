@@ -39,6 +39,8 @@ final class AppModel {
     private(set) var lastContactAt: Date?
     private(set) var dotPhaseObservedAt: Date?
     private(set) var stageDisplayID = UUID()
+    private(set) var ringDisplayID: UUID?
+    private var acknowledgedRingDisplayID: UUID?
     /// The one-second tick. Views whose content depends on elapsed time
     /// (freshness, leases) read it; nothing else redraws on the tick.
     private(set) var clock = Date()
@@ -86,7 +88,7 @@ final class AppModel {
             try await http.agentObject(path, method: body == nil ? "GET" : "POST", body: body, timeout: 8)
         })
         body.applyDisplay = { [weak self] state in
-            await self?.applyStageDisplay(state.surfaceText) ?? false
+            await self?.applyBodyDisplay(state) ?? false
         }
         surfaceDelivery.display = { [weak self] text in await self?.applyStageDisplay(text) ?? false }
         surfaceDelivery.speak = { [weak self] text, event in self?.speech.speak(text, onEvent: event) ?? false }
@@ -253,7 +255,7 @@ final class AppModel {
     // MARK: - Derived ring state
 
     func currentRingState(now: Date = Date()) -> RingMirrorState {
-        RingMirror.compose(
+        var mirror = RingMirror.compose(
             dot: echo.state,
             presentation: presentation.snapshot,
             remote: RemoteActs(thinking: feed.processing,
@@ -262,6 +264,14 @@ final class AppModel {
                              capturing: voice.isCapturing,
                              sending: conversation.isSending),
             now: now)
+        // The sensory socket carries Kairo's explicit body expression. It is
+        // distinct from the coarse presentation feed's committed affect.
+        // Use the same latest socket state for the label and Metal palette.
+        if let expression = body.display.ringExpression {
+            mirror.mood = expression
+            mirror.expressionAvailable = true
+        }
+        return mirror
     }
 
     func renderState(now: Date = Date()) -> RingRenderState {
@@ -379,8 +389,8 @@ final class AppModel {
     func updateSurfaceVisibility() {
         let visible = rootSurfaceVisible && isForeground && !body.screensaverActive && surfaceUnobscured()
         surfaceDelivery.setDisplayVisible(visible)
-        // Both sensory commands and settled output use the root display
-        // panel, so scrolling or changing destination cannot hide their act.
+        // Written output uses the root panel on every destination. Expression
+        // commands separately require the mounted center ring to acknowledge.
         body.setDisplayVisible(visible)
     }
 
@@ -390,6 +400,38 @@ final class AppModel {
         systems.start(paired: pairing.isPaired, foreground: isForeground)
         updateInvitations()
         if !pairing.isPaired { approvals.stop(); surfaceDelivery.stop(); privateRoom.stop(); clearStageDisplay() }
+    }
+
+    private var ringDisplayVisible: Bool {
+        rootSurfaceVisible && isForeground && !body.screensaverActive &&
+            destination == .stage && !systemsOpen && surfaceUnobscured()
+    }
+
+    private func applyBodyDisplay(_ state: BodyClient.DisplayState) async -> Bool {
+        guard let expression = state.ringExpression else {
+            return await applyStageDisplay(state.surfaceText)
+        }
+        body.display = state
+        guard ringDisplayVisible else { return false }
+        let id = UUID()
+        ringDisplayID = id
+        acknowledgedRingDisplayID = nil
+        defer {
+            if ringDisplayID == id { ringDisplayID = nil; acknowledgedRingDisplayID = nil }
+        }
+        for _ in 0..<40 {
+            guard ringDisplayVisible, ringDisplayID == id,
+                  body.display.ringExpression == expression, !Task.isCancelled else { return false }
+            if acknowledgedRingDisplayID == id { return true }
+            do { try await Task.sleep(for: .milliseconds(50)) } catch { return false }
+        }
+        return false
+    }
+
+    func acknowledgeRingDisplay(id: UUID, expression: String) {
+        guard ringDisplayVisible, ringDisplayID == id,
+              body.display.ringExpression == expression else { return }
+        acknowledgedRingDisplayID = id
     }
 
     func displayCommand(_ text: String) {

@@ -73,39 +73,47 @@ struct PresenceStageView: View {
     }
 
     private func ringStage(side: CGFloat) -> some View {
-        ZStack {
+        let ring = model.currentRingState(now: model.clock)
+        let displayID = model.ringDisplayID
+        return ZStack {
             KairoRingMetalView(state: model.renderState(now: model.clock), framesPerSecond: reduceMotion ? 10 : 30,
                                reduceMotion: reduceMotion, contact: contactPoint.map {
                                    CGPoint(x: $0.x / max(side, 1), y: $0.y / max(side, 1))
                                }, paused: model.body.screensaverActive)
-            if model.settings.cameraMode, let session = model.body.frontCameraSession {
-                FrontCameraPreview(session: session)
-                    .frame(width: side * 0.25, height: side * 0.25)
-                    .clipShape(Circle())
-                    .overlay(Circle().stroke(KairoTheme.body.opacity(0.3)))
-            } else {
-                VStack(spacing: 12) {
-                    Text(bodyHeadline.uppercased())
-                        .font(.system(size: 16, weight: .medium, design: .monospaced))
-                        .tracking(3).foregroundStyle(KairoTheme.prose)
-                        .multilineTextAlignment(.center).lineLimit(3)
-                    if model.ring.presentationFresh {
-                        Text(model.ring.mood.capitalized)
-                            .font(.system(size: 16)).foregroundStyle(KairoTheme.dim)
-                    }
-                    if let touchHint {
-                        Text(touchHint)
-                            .font(.system(size: 13, weight: .medium, design: .monospaced)).tracking(2)
-                            .foregroundStyle(model.contactPending ? KairoTheme.body : KairoTheme.chrome)
-                    }
-                }.frame(width: side * 0.34).allowsHitTesting(false)
+            VStack(spacing: 12) {
+                if model.settings.cameraMode, let session = model.body.frontCameraSession {
+                    FrontCameraPreview(session: session)
+                        .frame(width: side * 0.19, height: side * 0.19)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(KairoTheme.body.opacity(0.3)))
+                }
+                Text(bodyHeadline.uppercased())
+                    .font(.system(size: 16, weight: .medium, design: .monospaced))
+                    .tracking(3).foregroundStyle(KairoTheme.prose)
+                    .multilineTextAlignment(.center).lineLimit(3)
+                if ring.expressionAvailable {
+                    Text(ring.mood.capitalized)
+                        .font(.system(size: 20, weight: .medium)).foregroundStyle(KairoTheme.dim)
+                        .accessibilityIdentifier("ringExpression")
+                }
+                if let touchHint {
+                    Text(touchHint)
+                        .font(.system(size: 13, weight: .medium, design: .monospaced)).tracking(2)
+                        .foregroundStyle(model.contactPending ? KairoTheme.body : KairoTheme.chrome)
+                }
+            }
+            .frame(width: side * 0.34).allowsHitTesting(false)
+            .task(id: displayID) {
+                if let displayID, ring.expressionAvailable {
+                    model.acknowledgeRingDisplay(id: displayID, expression: ring.mood)
+                }
             }
         }
         .frame(width: side, height: side)
         .contentShape(Circle())
         .gesture(contactGesture(in: side))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Kairo presence. \(bodyHeadline)")
+        .accessibilityLabel("Kairo presence. \(bodyHeadline). \(ring.expressionAvailable ? ring.mood : "Expression unavailable")")
         .accessibilityHint(touchHint == nil ? "Kairo is busy; a touch is still observed" : "Activate to reach Kairo with a touch")
         .accessibilityAddTraits(.isButton)
         .accessibilityAction {
@@ -178,14 +186,16 @@ struct PresenceStageView: View {
         if applied.headline != "Kairo", !applied.headline.isEmpty {
             return applied.detail.isEmpty ? applied.headline : "\(applied.headline) — \(applied.detail)"
         }
-        switch model.ring.phase {
+        switch model.currentRingState(now: model.clock).phase {
         case .listening: return "listening"
         case .thinking: return "thinking"
         case .speaking: return "speaking"
         case .waiting: return "waiting for you"
         case .reflecting: return "reflecting"
         case .disconnected: return "reconnecting"
-        case .idle: return model.presentation.snapshot?.phase == "idle" ? "present" : "awaiting state"
+        case .idle:
+            if model.body.display.ringExpression != nil { return "Kairo" }
+            return model.presentation.snapshot?.phase == "idle" ? "present" : "awaiting state"
         }
     }
 

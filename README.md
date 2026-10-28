@@ -5,7 +5,7 @@ Kairo's iPad body endpoint: a dependency-free iPadOS 17 SwiftUI + Metal app
 `icu.kairo.body`. This public repository is the source of record for the
 installed body app; the server lives in the private novexai repository.
 
-Kairo Body 3.3 (v3.3.0, build 61) replaces the 1.0.x MVP line in place: same
+Kairo Body 3.3 (v3.3.1, build 62) replaces the 1.0.x MVP line in place: same
 bundle id, same Keychain service/accounts (`icu.kairo.body` bearer-token /
 agent-token, `icu.kairo.body.owner` paired-owner-proof), same UserDefaults
 identity (`echoSessionID` and friends), endpoint id `ipad-pro-2017`. A
@@ -76,7 +76,7 @@ Dot's endpoint id (`echomuse-rs03qr`) is a fixed deployment constant in
 
 GitHub Actions (`build-ipa.yml`) runs the unit suite on an iPad simulator,
 captures visual smoke screenshots, builds the unsigned device app, asserts
-bundle id, version 3.3.0/build 61, permission strings and that no personal
+bundle id, version 3.3.1/build 62, permission strings and that no personal
 provisioning was baked, then uploads `KairoBody.ipa`.
 
 On a Mac directly:
@@ -214,3 +214,15 @@ subprotocol rather than as a subprotocol value; this needs the agent API from
 novexai `3c420b67` or later. A missing Keychain credential is reported as
 `CredentialUnavailable` (transient), never as a synthetic 401, and a locked
 Keychain answers with the last value read rather than "absent".
+
+## 3.3.1 — Expression in the center ring
+
+Expression-only sensory display commands now update the center ring instead of
+opening the answer panel. The label, palette and motion use the same latest
+socket expression; live activity still shows listening, thinking or speaking.
+The coarse presentation affect remains a fallback before a socket expression
+arrives. Arbitrary written display messages and delivered answers retain their
+panel. Expression commands report visible completion only when the mounted ring
+acknowledges that command; another destination or the Systems panel cannot
+produce a successful ring-display receipt. Camera preview keeps the expression
+label visible as well.
