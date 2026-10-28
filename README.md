@@ -5,7 +5,7 @@ Kairo's iPad body endpoint: a dependency-free iPadOS 17 SwiftUI + Metal app
 `icu.kairo.body`. This public repository is the source of record for the
 installed body app; the server lives in the private novexai repository.
 
-Kairo Body 3.3 (v3.3.1, build 62) replaces the 1.0.x MVP line in place: same
+Kairo Body 3.4 (v3.4.0, build 63) replaces the 1.0.x MVP line in place: same
 bundle id, same Keychain service/accounts (`icu.kairo.body` bearer-token /
 agent-token, `icu.kairo.body.owner` paired-owner-proof), same UserDefaults
 identity (`echoSessionID` and friends), endpoint id `ipad-pro-2017`. A
@@ -76,7 +76,7 @@ Dot's endpoint id (`echomuse-rs03qr`) is a fixed deployment constant in
 
 GitHub Actions (`build-ipa.yml`) runs the unit suite on an iPad simulator,
 captures visual smoke screenshots, builds the unsigned device app, asserts
-bundle id, version 3.3.1/build 62, permission strings and that no personal
+bundle id, version 3.4.0/build 63, permission strings and that no personal
 provisioning was baked, then uploads `KairoBody.ipa`.
 
 On a Mac directly:
@@ -226,3 +226,30 @@ panel. Expression commands report visible completion only when the mounted ring
 acknowledges that command; another destination or the Systems panel cannot
 produce a successful ring-display receipt. Camera preview keeps the expression
 label visible as well.
+
+
+## 3.4 — Look within Presence
+
+The camera button in Presence and Conversation opens a local sharing sheet.
+Front camera shows a live, mirrored preview before Capture. Review the photo,
+Retake or Attach; selected library images also have a review step. Cancel keeps
+any existing photo attachment and question. The Look rail entry is a shortcut
+into this flow on Presence, rather than a separate chat.
+
+An attached photo stays on the iPad until Send. The existing conversation client
+then prepares the visual observation and submits its description attachment with
+the question in the same session. Both composers share the photo and text draft.
+Upload errors retain the draft; uncertain submissions retain the existing durable
+request and attachment identity for recovery. A sent photo is consumed from the
+composer, so later messages do not silently reattach it.
+
+The viewfinder reserves the front camera, pauses local motion detection and
+blocks competing remote captures. Inactivity pauses capture; backgrounding or
+closing Look stops the session and releases ownership. Permission dialogs do not
+close the sharing sheet. Remote-camera opt-in remains unchanged.
+
+Simulator coverage includes the camera entry, unavailable-camera recovery,
+cancellation, draft continuity, local selection, visual upload/session binding,
+retry retention and pending attachment recovery. Real iPad validation is still
+required for preview rotation/mirroring, exposure, camera permissions and motion
+sensing resumption.
