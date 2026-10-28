@@ -45,10 +45,7 @@ final class RemoteActRingTests: XCTestCase {
         XCTAssertTrue(accepted)
         XCTAssertEqual(compose(remote: RemoteActs(thinking: true, answeredAgo: 1),
                                dot: dot).phase, .listening)
-        // The established rule (testLocalActsOnlyFillSilence): server truth
-        // outranks this body's own claims, so remote work outranks a local
-        // act too - and a local conversation that just settled lands in the
-        // remote feed anyway, so this body's speech still shows as the beat.
+        // Actual local playback outranks unrelated global work.
         XCTAssertEqual(compose(remote: RemoteActs(thinking: true),
                                local: LocalActs(speaking: true)).phase, .speaking)
         XCTAssertEqual(compose(remote: RemoteActs(answeredAgo: 1),
@@ -60,5 +57,28 @@ final class RemoteActRingTests: XCTestCase {
         // never as speech - the words may never have been said yet.
         let state = compose(remote: RemoteActs(thinking: true))
         XCTAssertNotEqual(state.phase, .speaking)
+    }
+}
+
+final class PlaybackTimelineTests: XCTestCase {
+    func testLongDotPlaybackUsesFreshReceiptsNotAnswerAgeAndStopsImmediately() {
+        let base = Date(timeIntervalSince1970: 1_800_000_000)
+        var dot = DotActivityState()
+        for second in [0, 5, 10, 20, 40] {
+            let now = base.addingTimeInterval(Double(second))
+            XCTAssertTrue(dot.receive(["type": "dot_activity", "protocol_version": 2,
+                "endpoint_id": EchoBinding.endpointID, "sequence": second + 1,
+                "observed_at_ms": Int(now.timeIntervalSince1970 * 1000), "lease_ms": 5000,
+                "phase": "speaking", "replay_available": false, "output_levels": [0.2]], at: now))
+            XCTAssertEqual(RingMirror.compose(dot: dot, presentation: nil,
+                remote: RemoteActs(answeredAgo: Double(second)), local: LocalActs(), now: now).phase, .speaking)
+        }
+        let end = base.addingTimeInterval(41)
+        XCTAssertTrue(dot.receive(["type": "dot_activity", "protocol_version": 2,
+            "endpoint_id": EchoBinding.endpointID, "sequence": 99,
+            "observed_at_ms": Int(end.timeIntervalSince1970 * 1000), "lease_ms": 5000,
+            "phase": "idle", "replay_available": true, "output_levels": []], at: end))
+        XCTAssertEqual(RingMirror.compose(dot: dot, presentation: nil,
+            remote: RemoteActs(answeredAgo: 1), local: LocalActs(), now: end).phase, .idle)
     }
 }

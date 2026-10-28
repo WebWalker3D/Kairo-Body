@@ -24,7 +24,7 @@ final class ParticleRenderTests: XCTestCase {
         let pipeline = try device.makeRenderPipelineState(descriptor: descriptor)
         let queue = try XCTUnwrap(device.makeCommandQueue())
         let size = 640
-        func render(time: Float, touch: SIMD4<Float> = .zero, sleeping: Bool = false) throws -> [UInt8] {
+        func render(time: Float, touch: SIMD4<Float> = .zero, sleeping: Bool = false, arousal: Float = 0.3, flow: Float = 0, primary: SIMD3<Float>? = nil) throws -> [UInt8] {
             let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba8Unorm_srgb,
                 width: size, height: size, mipmapped: false)
             desc.usage = [.renderTarget]
@@ -39,9 +39,12 @@ final class ParticleRenderTests: XCTestCase {
             let encoder = try XCTUnwrap(command.makeRenderCommandEncoder(descriptor: pass))
             var state = RingRenderState()
             state.sleeping = sleeping
+            state.arousal = arousal
+            if let primary { state.moodPrimary = primary }
             var uniforms = KairoRingUniformsStorage()
             uniforms.apply(state, viewport: CGSize(width: size, height: size))
             uniforms.paramsA.x = time
+            uniforms.paramsB.x = flow
             uniforms.viewport.z = 1
             uniforms.bind(encoder)
             var contact = touch
@@ -63,6 +66,9 @@ final class ParticleRenderTests: XCTestCase {
         let moved = try render(time: 4)
         let touched = try render(time: 0, touch: SIMD4<Float>(0.5, 0, 1, 0))
         let sleeping = try render(time: 0, sleeping: true)
+        XCTAssertNotEqual(still, try render(time: 0, arousal: 0.9), "Measured arousal reaches particle geometry")
+        XCTAssertNotEqual(still, try render(time: 0, flow: 0.5), "Integrated flow advances the torus")
+        XCTAssertNotEqual(still, try render(time: 0, primary: SIMD3(0.8, 0.3, 0.2)), "Selected colors reach the shader")
         let lit = stride(from: 0, to: still.count, by: 4).filter { still[$0+2] > 30 }.count
         XCTAssertGreaterThan(lit, 8_000, "Particle body must occupy a substantial visible field")
         XCTAssertLessThan(lit, size * size / 2, "Keep negative space around the body")

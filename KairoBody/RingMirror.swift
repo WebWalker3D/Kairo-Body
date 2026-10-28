@@ -64,7 +64,7 @@ enum RingMirror {
     /// The Dot's transient phase wins over the coarse presentation phase while
     /// its lease is fresh; presentation covers background reflection and
     /// waiting-on-owner; remote acts carry the same global truth faster
-    /// (active jobs = thinking, just-settled answer = a speaking beat);
+    /// (active jobs = thinking; settlement never implies audio);
     /// local acts cover this body only.
     static func compose(dot: DotActivityState, presentation: GlobalBodyPresentation?,
                         remote: RemoteActs = RemoteActs(),
@@ -105,15 +105,13 @@ enum RingMirror {
 
         // A conversation anywhere is this body's conversation: an active job
         // somewhere reads as thinking between the slower presentation polls,
-        // and an answer that just settled elsewhere gets a short speaking
-        // beat. A fresh Dot act and this body's own acts still outrank both.
+        // while only fresh Dot playback or the local player can claim speech.
         if remote.thinking, state.phase == .idle || state.phase == .waiting
             || state.phase == .reflecting {
             state.phase = .thinking
         }
-        if state.phase == .idle, let ago = remote.answeredAgo, ago >= 0, ago <= 8 {
-            state.phase = .speaking
-        }
+        // A settled text answer is not evidence of audio playback.
+        if local.speaking { state.phase = .speaking }
 
         // Local acts only matter when nothing farther is already visible.
         switch state.phase {
@@ -143,8 +141,8 @@ struct LocalActs: Equatable {
 
 /// What Kairo is doing on OTHER surfaces, read from the owner's global
 /// conversation feed. The iPad is a surface, not a separate Kairo: an active
-/// Discord job is this body thinking, and a just-settled answer anywhere is
-/// something Kairo said that this body should beat.
+/// Discord job is this body thinking. Answer age is transcript metadata only;
+/// it must never manufacture audio playback.
 struct RemoteActs: Equatable {
     var thinking = false
     var answeredAgo: TimeInterval?

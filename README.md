@@ -5,7 +5,7 @@ Kairo's iPad body endpoint: a dependency-free iPadOS 17 SwiftUI + Metal app
 `icu.kairo.body`. This public repository is the source of record for the
 installed body app; the server lives in the private novexai repository.
 
-Kairo Body 3.4 (v3.4.0, build 63) replaces the 1.0.x MVP line in place: same
+Kairo Body 3.5 (v3.5.0, build 64) replaces the 1.0.x MVP line in place: same
 bundle id, same Keychain service/accounts (`icu.kairo.body` bearer-token /
 agent-token, `icu.kairo.body.owner` paired-owner-proof), same UserDefaults
 identity (`echoSessionID` and friends), endpoint id `ipad-pro-2017`. A
@@ -76,7 +76,7 @@ Dot's endpoint id (`echomuse-rs03qr`) is a fixed deployment constant in
 
 GitHub Actions (`build-ipa.yml`) runs the unit suite on an iPad simulator,
 captures visual smoke screenshots, builds the unsigned device app, asserts
-bundle id, version 3.4.0/build 63, permission strings and that no personal
+bundle id, version 3.5.0/build 64, permission strings and that no personal
 provisioning was baked, then uploads `KairoBody.ipa`.
 
 On a Mac directly:
@@ -253,3 +253,20 @@ cancellation, draft continuity, local selection, visual upload/session binding,
 retry retention and pending attachment recovery. Real iPad validation is still
 required for preview rotation/mirroring, exposure, camera permissions and motion
 sensing resumption.
+
+## 3.5 — Measured torus state and playback timing
+
+The particle torus gently varies circulation, breathing and fallback color using
+fresh canonical valence/arousal and their effective confidence. Kairo's explicit
+sensory expression keeps color priority. Ambient changes ease over three seconds;
+phase integration avoids jumps when the flow rate changes. Missing/expired state
+returns to neutral. Operational energy capacity is currently uncalibrated and is
+not inferred from workload, mood labels or battery. The numeric state requires
+the corresponding paired `/api/ipad/presentation` server projection.
+
+A settled text answer no longer generates eight seconds of pretend speaking.
+Fresh Dot playback drives the visual through its leased activity stream, including
+buffer drain; local iPad playback begins at player start and outranks unrelated
+work. Lease loss stops the claim of speech. Relay cadence and network latency mean
+Dot mirroring is not sample-accurate lip synchronization. Real iPad/Dot acceptance
+still requires installation and listening through a full reply.

@@ -18,6 +18,7 @@ final class SpeechService {
     private var completion: ((ActionPhase, String) -> Void)?
     private var completionDeadline: Task<Void, Never>?
     var isBusy: Bool { speechTask != nil }
+    private(set) var isPlaying = false
 
     init(http: KairoHTTP = KairoHTTP()) {
         self.http = http
@@ -48,6 +49,7 @@ final class SpeechService {
                 if runGeneration == self.generation {
                     self.pendingAudio?.cancel()
                     self.pendingAudio = nil
+                    self.isPlaying = false
                     self.player = nil
                     self.speechTask = nil
                     self.completionDeadline?.cancel(); self.completionDeadline = nil
@@ -75,11 +77,13 @@ final class SpeechService {
                     current.delegate = outcome
                     self.player = current
                     guard current.play() else { throw VoiceError.playbackFailed }
+                    self.isPlaying = true
                     if index == 0 { self.completion?(.started, "audio player started") }
                     while outcome.success == nil {
                         try await Task.sleep(for: .milliseconds(100))
                     }
                     guard outcome.success == true else { throw VoiceError.playbackFailed }
+                    self.isPlaying = false
                     self.player = nil
                 }
                 guard runGeneration == self.generation else { throw CancellationError() }
@@ -106,6 +110,7 @@ final class SpeechService {
         speechTask = nil
         pendingAudio?.cancel()
         pendingAudio = nil
+        isPlaying = false
         player?.stop()
         player = nil
         onPlaybackStateChange?(false)

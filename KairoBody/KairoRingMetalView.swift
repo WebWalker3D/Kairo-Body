@@ -9,7 +9,8 @@ struct RingRenderState: Equatable {
     var coreColor: SIMD3<Float> = SIMD3<Float>(1, 1, 1)
     var emitterLevels: [Float] = []           // exactly 12 values
     var breath: Float = 0.35
-    var energy: Float = 0.0
+    var energy: Float = 0.5
+    var arousal: Float = 0.3
     var intensity: Float = 0.9
     var sleeping = false
     var fade: Float = 1
@@ -79,7 +80,10 @@ struct KairoRingMetalView: UIViewRepresentable {
         private var pipeline: MTLRenderPipelineState?
         private var queue: MTLCommandQueue?
         private var uniforms = KairoRingUniformsStorage()
-        private var start = CFAbsoluteTimeGetCurrent()
+        private var start = ProcessInfo.processInfo.systemUptime
+        private var lastFrame: Double?
+        private var target = RingRenderState()
+        private var dynamics = TorusDynamics()
         private var size: CGSize = .zero
         private var needsRender = true
 
@@ -112,7 +116,7 @@ struct KairoRingMetalView: UIViewRepresentable {
         }
 
         func apply(_ state: RingRenderState, size: CGSize) {
-            uniforms.apply(state, viewport: size)
+            target = state
             self.size = size
             needsRender = true
         }
@@ -131,8 +135,23 @@ struct KairoRingMetalView: UIViewRepresentable {
             // animation exact forever - the cost is one momentary phase skip
             // a day on an otherwise calm surface, far cheaper than the ring
             // quietly freezing on a shelf that never sleeps.
-            let elapsed = Float(CFAbsoluteTimeGetCurrent() - start)
+            let now = ProcessInfo.processInfo.systemUptime
+            let dt = lastFrame.map { min(max(now - $0, 0), 0.1) } ?? 0
+            lastFrame = now
+            dynamics.advance(toward: TorusAppearance(primary: target.moodPrimary,
+                accent: target.moodAccent, arousal: target.arousal, energy: target.energy),
+                seconds: dt, reducedMotion: reducedMotion)
+            var rendered = target
+            rendered.moodPrimary = dynamics.current.primary
+            rendered.moodAccent = dynamics.current.accent
+            rendered.arousal = dynamics.current.arousal
+            rendered.energy = dynamics.current.energy
+            rendered.breath = 0.18 + rendered.arousal * 0.14
+            uniforms.apply(rendered, viewport: size)
+            let elapsed = Float(now - start)
             uniforms.paramsA.x = reducedMotion ? 0 : elapsed.truncatingRemainder(dividingBy: 43_200)
+            uniforms.paramsB.x = dynamics.flowPhase
+            uniforms.paramsB.y = dynamics.breathPhase
             uniforms.viewport.z = Float(view.drawableSize.width / max(view.bounds.width, 1))
             contactCurrent = reducedMotion ? contactTarget : contactCurrent + (contactTarget - contactCurrent) * 0.15
             uniforms.bind(encoder)
@@ -176,13 +195,13 @@ struct KairoRingUniformsStorage {
         paramsA.y = state.breath
         paramsA.z = state.energy
         paramsA.w = state.intensity
-        // Ring radius and emitter width in the shader's normalized space.
-        paramsB.x = 0.46
-        paramsB.y = 0.055
+        // Integrated flow/breath phases are supplied by the renderer.
+        paramsB.x = 0
+        paramsB.y = 0
         paramsB.z = state.fade
         paramsB.w = state.sleeping ? 1 : 0
         paramsC = SIMD4<Float>(Float(state.activity.rawValue), state.activityLevel,
-                               Float(state.motion.rawValue), 0)
+                               Float(state.motion.rawValue), state.arousal)
         let levels = state.emitterLevels.count == 12 ? state.emitterLevels :
             RingMirror.resample(state.emitterLevels.map(Double.init), to: 12).map(Float.init)
         withUnsafeMutableBytes(of: &emitterStorage) { bytes in

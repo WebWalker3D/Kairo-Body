@@ -262,7 +262,7 @@ final class AppModel {
             presentation: presentation.snapshot,
             remote: RemoteActs(thinking: feed.processing,
                                answeredAgo: feed.lastAnsweredAt.map { max(0, now.timeIntervalSince($0)) }),
-            local: LocalActs(speaking: speech.isBusy,
+            local: LocalActs(speaking: speech.isPlaying,
                              capturing: voice.isCapturing,
                              sending: conversation.isSending),
             now: now)
@@ -278,15 +278,17 @@ final class AppModel {
 
     func renderState(now: Date = Date()) -> RingRenderState {
         let mirror = currentRingState(now: now)
-        let palette = ExpressionPalette.forState(mirror.mood)
-        let colors = palette.rgb
+        let numeric = presentation.snapshot.flatMap { $0.isFresh(at: now) ? $0.torus : nil }
+        let appearance = TorusAppearance.resolve(signal: numeric,
+            expression: body.display.ringExpression, now: now)
         var state = RingRenderState()
-        state.moodPrimary = colors.primary
-        state.moodAccent = colors.accent
+        state.moodPrimary = appearance.primary
+        state.moodAccent = appearance.accent
         let levels = RingMirror.resample(mirror.levels, to: RingMirror.emitterCount)
         state.emitterLevels = levels.map(Float.init)
-        state.breath = palette.energy * 0.5
-        state.energy = Float(max(mirror.intensity, Double(palette.energy) * (mirror.phase == .idle ? 0.25 : 0.7)))
+        state.breath = 0.18 + appearance.arousal * 0.14
+        state.energy = appearance.energy
+        state.arousal = appearance.arousal
         state.intensity = body.connectionState == .connected || mirror.dotFresh ? 0.95 : 0.55
         state.sleeping = body.screensaverActive
         // The verbs: speaking/thinking/listening animate the ring even when
@@ -294,7 +296,7 @@ final class AppModel {
         // the phase itself is the observed fact, as 1.0.x treated it.
         state.activity = RingMirror.activity(for: mirror.phase)
         state.activityLevel = state.activity == .idle ? 0 : Float(max(mirror.intensity, 0.6))
-        state.motion = palette.motionMode
+        state.motion = .breathe
         return state
     }
 

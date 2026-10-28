@@ -40,17 +40,18 @@ vertex ParticleVertex kairoParticleVertex(uint id [[vertex_id]],
     // occupies the remaining points. No per-frame allocations or CPU loops.
     float strand = floor(float(id)/640);
     float along = float(id%640)/640;
-    float speed = .045 + .012*hash(strand);
-    if (activity > 2.5) speed *= 2.2; // actual thinking
-    float a = along*TAU + t*speed;
+    float arousal = clamp(u.paramsC.w,0.0,1.0);
+    // A shared integrated phase closes seamlessly at TAU. State-dependent
+    // speed changes never multiply elapsed uptime or teleport the filaments.
+    float a = along*TAU + u.paramsB.x;
     float v = strand*2.399963 + a*3 + t*.13;
     uint emitter = uint(floor(fract((-a/TAU)-.5)*12)) % 12;
     float signal = clamp(u.emitters[emitter].x,0.0,1.0);
     float pulse = 0;
     if (u.paramsC.z > 2.5) pulse = pow(max(0.0,sin(t*2.6+a*3)),12.0)*.025;
     else if (u.paramsC.z > 1.5) pulse = pow(max(0.0,sin(t*3.3)),6.0)*.025;
-    float breath = sin(t*.8)*u.paramsA.y*.018;
-    float wave = sin(a*5-t*.23+strand*.2);
+    float breath = sin(u.paramsB.y)*u.paramsA.y*.018;
+    float wave = sin(a*5-t*.23+strand*.2) * (.85+arousal*.3);
     float tube = .125 + energy*.025 + signal*.035;
     if (activity > 1.5 && activity < 2.5) tube += sin(a*9+t*8)*live*.016;
     float r = .53 + tube*sin(v) + .027*wave + breath + pulse;

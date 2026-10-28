@@ -6,6 +6,7 @@ import Observation
 /// committed affect preset and physical proximity, in the same visual
 /// vocabulary the living ring uses.
 struct GlobalBodyPresentation {
+    let torus: TorusSignal?
     let proximity: BodyProximity?
     let phase: String
     let expression: String?
@@ -39,6 +40,7 @@ struct GlobalBodyPresentation {
               let activity = object["activity"] as? [String: Any], let phase = activity["phase"] as? String,
               ["working", "queued", "waiting", "background", "idle"].contains(phase) else { return nil }
         self.phase = phase; observedAt = observed; expiresAt = expires
+        torus = TorusSignal(object: object["torus"] as? [String: Any], now: now)
         proximity = BodyProximity(object: object["body_proximity"] as? [String: Any], now: now)
         let affect = object["expression"] as? [String: Any]
         let presets = ["calm", "curious", "focused", "joyful", "concerned", "playful", "reflective", "resolute"]
