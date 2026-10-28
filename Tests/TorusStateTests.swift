@@ -51,6 +51,20 @@ final class TorusStateTests: XCTestCase {
         }
     }
 
+    func testThinkingAdvancesTheIntegratedFlowWithoutChangingAffectOrColors() {
+        var idle = TorusDynamics()
+        var thinking = TorusDynamics()
+        for _ in 0..<60 {
+            idle.advance(toward: .neutral, seconds: 1.0 / 60, reducedMotion: false)
+            thinking.advance(toward: .neutral, seconds: 1.0 / 60, reducedMotion: false, activity: .thinking)
+        }
+        XCTAssertGreaterThan(thinking.flowPhase, idle.flowPhase * 2)
+        XCTAssertEqual(thinking.current, idle.current)
+        let phase = thinking.flowPhase
+        thinking.advance(toward: .neutral, seconds: 0, reducedMotion: false, activity: .idle)
+        XCTAssertEqual(thinking.flowPhase, phase)
+    }
+
     func testAmbientInterpolationIsFrameRateIndependentAndPhaseContinuous() {
         let target = TorusAppearance.resolve(signal: signal(), expression: nil, now: now)
         var thirty = TorusDynamics()

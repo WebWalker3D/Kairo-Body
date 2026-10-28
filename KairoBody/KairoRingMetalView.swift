@@ -140,7 +140,7 @@ struct KairoRingMetalView: UIViewRepresentable {
             lastFrame = now
             dynamics.advance(toward: TorusAppearance(primary: target.moodPrimary,
                 accent: target.moodAccent, arousal: target.arousal, energy: target.energy),
-                seconds: dt, reducedMotion: reducedMotion)
+                seconds: dt, reducedMotion: reducedMotion, activity: target.activity)
             var rendered = target
             rendered.moodPrimary = dynamics.current.primary
             rendered.moodAccent = dynamics.current.accent

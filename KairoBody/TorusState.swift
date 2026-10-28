@@ -70,7 +70,7 @@ struct TorusDynamics {
     private(set) var flowPhase: Float = 0
     private(set) var breathPhase: Float = 0
 
-    mutating func advance(toward target: TorusAppearance, seconds: Double, reducedMotion: Bool) {
+    mutating func advance(toward target: TorusAppearance, seconds: Double, reducedMotion: Bool, activity: RingActivity = .idle) {
         guard seconds.isFinite, seconds > 0 else { return }
         let dt = min(seconds, 1)
         let blend = Float(1 - exp(-dt / 3))
@@ -79,7 +79,7 @@ struct TorusDynamics {
         current.arousal += (target.arousal - current.arousal) * blend
         current.energy += (target.energy - current.energy) * blend
         guard !reducedMotion else { return }
-        flowPhase = (flowPhase + Float(dt) * (0.032 + current.arousal * 0.035))
+        flowPhase = (flowPhase + Float(dt) * (0.032 + current.arousal * 0.035) * (activity == .thinking ? 2.2 : 1))
             .truncatingRemainder(dividingBy: Float.pi * 2)
         breathPhase = (breathPhase + Float(dt) * (0.5 + current.arousal * 0.55))
             .truncatingRemainder(dividingBy: Float.pi * 2)
