@@ -15,6 +15,7 @@ struct KairoBodyApp: App {
                     model.connectIfNeeded()
                 }
                 .onChange(of: scenePhase) { _, phase in
+                    if phase == .background { model.lookPresented = false }
                     model.setForeground(phase == .active)
                 }
         }

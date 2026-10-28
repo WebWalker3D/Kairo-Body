@@ -120,6 +120,7 @@ struct TranscriptView: View {
 
     private var composer: some View {
         VStack(spacing: 8) {
+            SharedImageAttachment()
             if model.conversation.isSending {
                 HStack(spacing: 10) {
                     ProgressView().tint(KairoTheme.primary)
@@ -135,6 +136,12 @@ struct TranscriptView: View {
                 }
             }
             HStack(spacing: 10) {
+                Button {
+                    composerFocused = false
+                    model.body.noteUserActivity()
+                    model.lookPresented = true
+                } label: { Image(systemName: "camera").frame(width: 44, height: 44) }
+                    .accessibilityLabel("Show Kairo something").disabled(!model.conversation.canSubmit)
                 Picker("Output", selection: Binding(get: { model.conversation.outputDestination }, set: { model.conversation.outputDestination = $0 })) {
                     ForEach(ConversationClient.OutputDestination.allCases) { option in
                         Text(option.rawValue).tag(option)
@@ -159,7 +166,7 @@ struct TranscriptView: View {
                 Button {
                     let text = model.conversation.draft
                     composerFocused = false
-                    Task { await model.conversation.send(text) }
+                    Task { await model.conversation.send(text, imageDraft: model.imageDraft) }
                 } label: {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 28))

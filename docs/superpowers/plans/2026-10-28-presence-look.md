@@ -8,7 +8,7 @@
 
 **Tech Stack:** Existing SwiftUI, AVFoundation, Observation, UIKit; iPadOS 17, no dependencies.
 
-**Spec:** User-approved conversation proposal: live preview → capture → review/retake/cancel → attach to Presence → send question and image in the existing conversation. Keep Look navigation as a shortcut into this flow, with no separate question/reply surface.
+**Spec:** `docs/superpowers/specs/2026-10-28-presence-look-design.md`. User-approved conversation proposal: live preview → capture → review/retake/cancel → attach to Presence → send question and image in the existing conversation. Keep Look navigation as a shortcut into this flow, with no separate question/reply surface.
 
 ## Global Constraints
 

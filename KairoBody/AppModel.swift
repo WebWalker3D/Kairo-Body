@@ -22,6 +22,8 @@ final class AppModel {
     let echo = DotObserverClient()
     let voice = VoiceInputService()
     let visual = SharedVisualContext()
+    let imageDraft = SharedImageDraft()
+    var lookPresented = false
 
     let speech: SpeechService
     let body: BodyClient
@@ -387,7 +389,7 @@ final class AppModel {
     }
 
     func updateSurfaceVisibility() {
-        let visible = rootSurfaceVisible && isForeground && !body.screensaverActive && surfaceUnobscured()
+        let visible = rootSurfaceVisible && isForeground && !body.screensaverActive && !lookPresented && surfaceUnobscured()
         surfaceDelivery.setDisplayVisible(visible)
         // Written output uses the root panel on every destination. Expression
         // commands separately require the mounted center ring to acknowledge.
@@ -404,7 +406,7 @@ final class AppModel {
 
     private var ringDisplayVisible: Bool {
         rootSurfaceVisible && isForeground && !body.screensaverActive &&
-            destination == .stage && !systemsOpen && surfaceUnobscured()
+            destination == .stage && !systemsOpen && !lookPresented && surfaceUnobscured()
     }
 
     private func applyBodyDisplay(_ state: BodyClient.DisplayState) async -> Bool {

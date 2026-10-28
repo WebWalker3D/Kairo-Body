@@ -29,6 +29,7 @@ struct PresenceStageView: View {
                         InvitationCard(invitation: invitation)
                             .frame(maxWidth: 640).padding(.bottom, 10)
                     }
+                    SharedImageAttachment().frame(maxWidth: 640).padding(.bottom, 8)
                     composer.frame(maxWidth: 640)
                 }
                 .padding(.horizontal, geometry.size.width > 900 ? 40 : 24)
@@ -126,6 +127,13 @@ struct PresenceStageView: View {
 
     private var composer: some View {
         HStack(spacing: 12) {
+            Button {
+                composerFocused = false
+                model.body.noteUserActivity()
+                model.lookPresented = true
+            } label: {
+                Image(systemName: "camera").font(.system(size: 19, weight: .light)).frame(width: 36, height: 44)
+            }.accessibilityLabel("Show Kairo something").disabled(!model.conversation.canSubmit)
             Button { model.destination = .conversation } label: {
                 Image(systemName: "bubble.left.and.bubble.right")
                     .font(.system(size: 19, weight: .light)).frame(width: 36, height: 44)
@@ -146,7 +154,7 @@ struct PresenceStageView: View {
                 let text = model.conversation.draft
                 composerFocused = false
                 model.body.noteUserActivity()
-                Task { await model.conversation.send(text) }
+                Task { await model.conversation.send(text, imageDraft: model.imageDraft) }
             } label: {
                 Image(systemName: "arrow.up")
                     .font(.system(size: 18, weight: .semibold))
@@ -444,6 +452,18 @@ struct FrontCameraPreview: UIViewRepresentable {
             previewLayer.videoGravity = .resizeAspectFill
             previewLayer.connection?.automaticallyAdjustsVideoMirroring = false
             previewLayer.connection?.isVideoMirrored = true
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            guard let connection = previewLayer.connection else { return }
+            if connection.isVideoOrientationSupported {
+                connection.videoOrientation = AVCaptureVideoOrientation(interfaceOrientation: window?.windowScene?.interfaceOrientation ?? .portrait)
+            }
+            if connection.isVideoMirroringSupported {
+                connection.automaticallyAdjustsVideoMirroring = false
+                connection.isVideoMirrored = true
+            }
         }
 
         required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }

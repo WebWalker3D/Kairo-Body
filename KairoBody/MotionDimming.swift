@@ -61,8 +61,21 @@ final class FrontCameraMotionDetector: NSObject, AVCaptureVideoDataOutputSampleB
     private var session: AVCaptureSession?
     private var analyzer = FrameMotionAnalyzer()
     private var lastSampleAt = Date.distantPast
+    private let generationLock = NSLock()
+    private var generation = 0
 
-    func start() async -> Bool {
+    /// Read synchronously by the camera owner before yielding for startup.
+    func startTicket() -> Int {
+        generationLock.lock(); defer { generationLock.unlock() }
+        return generation
+    }
+
+    private func invalidateStarts() {
+        generationLock.lock(); generation += 1; generationLock.unlock()
+    }
+
+    func start(ticket: Int) async -> Bool {
+        guard startTicket() == ticket else { return false }
         let authorized: Bool
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized: authorized = true
@@ -72,6 +85,10 @@ final class FrontCameraMotionDetector: NSObject, AVCaptureVideoDataOutputSampleB
         guard authorized else { return false }
         return await withCheckedContinuation { continuation in
             queue.async {
+                guard self.startTicket() == ticket else {
+                    continuation.resume(returning: false)
+                    return
+                }
                 if self.session != nil {
                     continuation.resume(returning: true)
                     return
@@ -106,6 +123,7 @@ final class FrontCameraMotionDetector: NSObject, AVCaptureVideoDataOutputSampleB
     }
 
     func stop() async {
+        invalidateStarts()
         await withCheckedContinuation { continuation in
             queue.async {
                 self.session?.stopRunning()

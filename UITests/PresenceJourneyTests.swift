@@ -84,6 +84,12 @@ final class PresenceJourneyTests: XCTestCase {
         XCTAssertTrue(app.buttons["Front camera"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["Discuss this image"].exists)
         capture("Presence-look-sheet")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        capture("Presence-look-sheet-landscape")
+        app.buttons["Front camera"].tap()
+        // The simulator has no front camera; it must show a recoverable error.
+        XCTAssertTrue(app.buttons["Try camera again"].waitForExistence(timeout: 10))
+        capture("Presence-camera-unavailable")
         app.buttons["Cancel"].tap()
         XCTAssertEqual(composer.value as? String, "Look at this with me")
     }

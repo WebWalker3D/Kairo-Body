@@ -84,6 +84,7 @@ final class BodyClient {
     private var actionLifecycle = BodyActionLifecycle()
     private let observationDelivery = ObservationDelivery()
     private var cameraBusy = false
+    private var sharedCameraReservation: UUID?
     private var locationDeliveryPending = false
     private var lastFrameSentAt: Date?
     private var actionTasks: [String: Task<Void, Never>] = [:]
@@ -254,7 +255,7 @@ final class BodyClient {
     /// movement; a bare heartbeat never does. The closure keeps this client
     /// independent of the composition root.
     var dimmingBusyProbe: () -> Bool = { false }
-    private func dimmingIsBusy() -> Bool { responseActive || dimmingBusyProbe() }
+    private func dimmingIsBusy() -> Bool { responseActive || cameraBusy || dimmingBusyProbe() }
 
     func noteUserActivity() {
         guard shouldRun, settings.dimWhenStill, isForeground else { return }
@@ -300,11 +301,14 @@ final class BodyClient {
     }
 
     func resumeFrontMotion() {
+        guard !cameraBusy else { return }
         frontMotionSuspended = false
         guard shouldRun, (settings.dimWhenStill || settings.cameraMode), isForeground else { return }
         Task { [weak self] in
-            guard let self else { return }
-            let started = await self.frontMotion.start()
+            guard let self, !self.cameraBusy, !self.frontMotionSuspended,
+                  self.isForeground, self.shouldRun else { return }
+            let ticket = self.frontMotion.startTicket()
+            let started = await self.frontMotion.start(ticket: ticket)
             if !self.shouldRun || !self.isForeground || self.frontMotionSuspended ||
                 !(self.settings.dimWhenStill || self.settings.cameraMode) {
                 await self.frontMotion.stop()
@@ -386,6 +390,29 @@ final class BodyClient {
         // Without an ack the claim still runs: the server is the authority on
         // whether it observed the contact, and refuses honestly if not.
         return true
+    }
+
+    /// The explicit sharing viewfinder owns the front camera until its session
+    /// has stopped. A stale dismissal cannot release a newer owner's camera.
+    func reserveSharedCamera() async throws -> UUID {
+        guard isForeground, !cameraBusy else { throw CameraCaptureService.CameraError.notReady }
+        let id = UUID()
+        sharedCameraReservation = id
+        cameraBusy = true
+        noteUserActivity()
+        await suspendFrontMotion()
+        guard isForeground, !Task.isCancelled else {
+            releaseSharedCamera(id)
+            throw CameraCaptureService.CameraError.notReady
+        }
+        return id
+    }
+
+    func releaseSharedCamera(_ id: UUID) {
+        guard sharedCameraReservation == id else { return }
+        sharedCameraReservation = nil
+        cameraBusy = false
+        resumeFrontMotion()
     }
 
     func captureSharedFrontPhoto() async throws -> UIImage {

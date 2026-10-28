@@ -164,9 +164,10 @@ final class ConversationClient {
 
     @discardableResult
     func send(_ text: String, attachmentIDs: [String] = [],
-              attachmentSessionID: String? = nil) async -> Bool {
+              attachmentSessionID: String? = nil, imageDraft: SharedImageDraft? = nil) async -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard canSubmit, !trimmed.isEmpty, trimmed.count <= 16_000 else { return false }
+        let photo = imageDraft?.photo
         isSending = true
         error = nil
         reply = ""
@@ -176,7 +177,7 @@ final class ConversationClient {
         lastObservedAt = nil
         observedStatus = ""
         lastJobID = ""
-        if draft.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed { draft = "" }
+        if photo == nil, draft.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed { draft = "" }
         promptProgress = nil
         stopRequested = false
         generation += 1
@@ -194,9 +195,26 @@ final class ConversationClient {
                     try await self.prepareOutput?(destination)
                     guard current == self.generation else { throw CancellationError() }
                 }
+                var resolvedAttachments = attachmentIDs
+                if let photo {
+                    guard let image = photo.image else { throw CameraCaptureService.CameraError.noImage }
+                    self.status = "Sharing your photo with Kairo…"
+                    let context = SharedVisualContext()
+                    let selection = context.beginSelection(sessionID: sessionID)
+                    try await self.uploadVisual(image, source: photo.source, to: context,
+                        sessionID: sessionID, selection: selection, observedAt: photo.observedAt)
+                    try Task.checkCancellation()
+                    guard current == self.generation else { throw CancellationError() }
+                    resolvedAttachments = context.attachmentIDs(for: sessionID)
+                    guard !resolvedAttachments.isEmpty else { throw ConversationError.invalidResponse }
+                }
                 let turn = PendingTurn.new(sessionID: sessionID, text: trimmed,
-                                           attachmentIDs: attachmentIDs, outputDestination: destination)
+                                           attachmentIDs: resolvedAttachments, outputDestination: destination)
                 self.pendingStore.save(turn)
+                if let photo {
+                    imageDraft?.remove(ifMatching: photo.id)
+                    if self.draft.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed { self.draft = "" }
+                }
                 let jobID = try await self.tracker.submit(turn)
                 guard current == self.generation, !Task.isCancelled else { return }
                 var stored = turn; stored.jobID = jobID
@@ -207,6 +225,9 @@ final class ConversationClient {
                 try await self.settle(stored, jobID: jobID, generation: current)
             } catch {
                 self.handleFailure(error, generation: current)
+                if current == self.generation, !self.hasPendingTurn, let photo {
+                    imageDraft?.restoreIfEmpty(photo)
+                }
             }
             if current == self.generation { self.isSending = false }
         }

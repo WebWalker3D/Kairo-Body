@@ -39,7 +39,15 @@ struct RootShellView: View {
         .onDisappear { model.setSurfaceVisibility(false) }
         .onChange(of: model.pairing.isPaired) { _, _ in model.pairingChanged() }
         .onChange(of: needsSetup) { _, value in model.setSurfaceVisibility(!value) }
-        .onChange(of: model.destination) { _, _ in model.updateSurfaceVisibility() }
+        .onChange(of: model.destination) { _, destination in
+            if destination == .look {
+                model.destination = .stage
+                model.systemsOpen = false
+                model.lookPresented = true
+            }
+            model.updateSurfaceVisibility()
+        }
+        .onChange(of: model.lookPresented) { _, _ in model.updateSurfaceVisibility() }
         .onChange(of: model.body.screensaverActive) { _, asleep in
             if asleep { model.systemsOpen = false }
             model.updateSurfaceVisibility()
@@ -49,6 +57,10 @@ struct RootShellView: View {
         .animation(.easeInOut(duration: 0.8), value: model.body.screensaverActive)
         .sheet(isPresented: $needsSetup) {
             SetupView().environment(model)
+        }
+        .sheet(isPresented: Binding(get: { model.lookPresented }, set: { model.lookPresented = $0 }),
+               onDismiss: { model.updateSurfaceVisibility() }) {
+            LookTogetherView().environment(model)
         }
         .alert("Kairo", isPresented: Binding(
             get: { conversationError != nil },
@@ -63,7 +75,7 @@ struct RootShellView: View {
         switch model.destination {
         case .stage: PresenceStageView()
         case .conversation: TranscriptView()
-        case .look: LookTogetherView()
+        case .look: PresenceStageView()
         case .privateRoom: PrivateRoomView()
         case .bodySurface: BodySurfaceView()
         case .settings: SettingsView()
@@ -86,7 +98,10 @@ private struct BottomRail: View {
                 railButton(title: item == .stage ? "Presence" : item.rawValue, icon: icon(item),
                            selected: model.destination == item && !model.systemsOpen) {
                     model.systemsOpen = false
-                    model.destination = item
+                    if item == .look {
+                        model.destination = .stage
+                        model.lookPresented = true
+                    } else { model.destination = item }
                 }
             }
             railButton(title: "Systems", icon: "square.grid.2x2",
