@@ -14,9 +14,9 @@ final class RemoteActRingTests: XCTestCase {
         XCTAssertEqual(compose(remote: RemoteActs(thinking: true)).phase, .thinking)
     }
 
-    func testJustAnsweredSomewhereGetsABriefSpeakingBeat() {
-        XCTAssertEqual(compose(remote: RemoteActs(answeredAgo: 3)).phase, .speaking)
-        XCTAssertEqual(compose(remote: RemoteActs(answeredAgo: 8)).phase, .speaking)
+    func testSettledAnswerWithoutPlaybackNeverSpeaks() {
+        XCTAssertEqual(compose(remote: RemoteActs(answeredAgo: 3)).phase, .idle)
+        XCTAssertEqual(compose(remote: RemoteActs(answeredAgo: 8)).phase, .idle)
     }
 
     func testAnswerBeatLapsesAndNeverFiresOnFutureOrNegativeAges() {
@@ -50,7 +50,7 @@ final class RemoteActRingTests: XCTestCase {
         // act too - and a local conversation that just settled lands in the
         // remote feed anyway, so this body's speech still shows as the beat.
         XCTAssertEqual(compose(remote: RemoteActs(thinking: true),
-                               local: LocalActs(speaking: true)).phase, .thinking)
+                               local: LocalActs(speaking: true)).phase, .speaking)
         XCTAssertEqual(compose(remote: RemoteActs(answeredAgo: 1),
                                local: LocalActs(speaking: true)).phase, .speaking)
     }
