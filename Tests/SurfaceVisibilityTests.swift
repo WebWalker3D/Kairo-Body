@@ -78,6 +78,47 @@ final class SurfaceVisibilityTests: XCTestCase {
         XCTAssertNil(model.stageDisplayText)
     }
 
+    func testCoveringRingInvalidatesPendingDisplayReceipt() async throws {
+        let model = AppModel(surfaceUnobscured: { true })
+        model.setSurfaceVisibility(true)
+        let delivery = Task { await model.body.applyDisplay(.init(state: "calm", headline: "Kairo", detail: "")) }
+        for _ in 0..<40 {
+            if model.ringDisplayID != nil { break }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        let id = try XCTUnwrap(model.ringDisplayID)
+        model.systemsOpen = true
+        model.acknowledgeRingDisplay(id: id, expression: "calm")
+        let applied = await delivery.value
+        XCTAssertFalse(applied)
+    }
+
+    func testRepeatedExpressionRequiresItsOwnMountedReceipt() async throws {
+        let model = AppModel(surfaceUnobscured: { true })
+        model.setSurfaceVisibility(true)
+        let state = BodyClient.DisplayState(state: "calm", headline: "Kairo", detail: "")
+        let first = Task { await model.body.applyDisplay(state) }
+        for _ in 0..<40 {
+            if model.ringDisplayID != nil { break }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        let firstID = try XCTUnwrap(model.ringDisplayID)
+        let second = Task { await model.body.applyDisplay(state) }
+        for _ in 0..<40 {
+            if model.ringDisplayID != firstID { break }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        let secondID = try XCTUnwrap(model.ringDisplayID)
+        XCTAssertNotEqual(firstID, secondID)
+        model.acknowledgeRingDisplay(id: firstID, expression: "calm")
+        let firstApplied = await first.value
+        XCTAssertFalse(firstApplied)
+        XCTAssertEqual(model.ringDisplayID, secondID)
+        model.acknowledgeRingDisplay(id: secondID, expression: "calm")
+        let secondApplied = await second.value
+        XCTAssertTrue(secondApplied)
+    }
+
     func testWrittenSensoryDisplayStillUsesAnswerPanel() async {
         let model = AppModel(surfaceUnobscured: { true })
         model.setSurfaceVisibility(true)
