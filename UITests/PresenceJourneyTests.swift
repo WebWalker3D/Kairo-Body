@@ -67,6 +67,28 @@ final class PresenceJourneyTests: XCTestCase {
     }
 
     @MainActor
+    func testLookOpensWithinPresenceAndCancelPreservesDraft() throws {
+        let app = XCUIApplication()
+        app.launch()
+        if app.buttons["Not now (stages stay local)"].waitForExistence(timeout: 5) {
+            app.buttons["Not now (stages stay local)"].tap()
+        }
+        let composer = app.descendants(matching: .any).matching(identifier: "stageComposer").firstMatch
+        XCTAssertTrue(composer.waitForExistence(timeout: 10))
+        composer.tap()
+        composer.typeText("Look at this with me")
+        let camera = app.buttons["Show Kairo something"]
+        XCTAssertTrue(camera.exists, "Camera sharing must be available in Presence")
+        guard camera.exists else { return }
+        camera.tap()
+        XCTAssertTrue(app.buttons["Front camera"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Discuss this image"].exists)
+        capture("Presence-look-sheet")
+        app.buttons["Cancel"].tap()
+        XCTAssertEqual(composer.value as? String, "Look at this with me")
+    }
+
+    @MainActor
     private func capture(_ name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name
