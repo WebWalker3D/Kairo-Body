@@ -3,6 +3,18 @@ import XCTest
 
 @MainActor
 final class SurfaceVisibilityTests: XCTestCase {
+    func testExpressionCommandUpdatesRingWithoutOpeningAnswerPanel() async {
+        let model = AppModel(surfaceUnobscured: { true })
+        model.setSurfaceVisibility(true)
+        let state = BodyClient.DisplayState(state: "curious", headline: "Kairo", detail: "Current expression: curious")
+        let delivery = Task { await model.body.applyDisplay(state) }
+        try? await Task.sleep(for: .milliseconds(100))
+        XCTAssertNil(model.stageDisplayText, "Expression updates belong in the ring, not the answer panel")
+        XCTAssertEqual(model.currentRingState().mood, "curious")
+        delivery.cancel()
+        _ = await delivery.value
+    }
+
     func testModalObscurationRejectsOutputBeforePublishingText() async {
         let model = AppModel(surfaceUnobscured: { false })
         model.setSurfaceVisibility(true)
