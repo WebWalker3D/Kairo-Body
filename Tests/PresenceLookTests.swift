@@ -1,5 +1,6 @@
 import XCTest
 import UIKit
+import SwiftUI
 @testable import KairoBody
 
 private final class LookHTTP: URLProtocol {
@@ -159,6 +160,38 @@ final class PresenceLookTests: XCTestCase {
         await detector.stop()
         let started = await detector.start(ticket: ticket)
         XCTAssertFalse(started, "Stopped camera ownership cannot be resurrected by a delayed start")
+    }
+
+    func testAttachedPhotoLayoutInPresenceAndConversation() async throws {
+        let model = AppModel(appSettings: AppSettings(defaults: defaults),
+                             pendingStore: PendingTurnStore(defaults: defaults))
+        model.conversation.draft = "What do you notice in this photo?"
+        try model.imageDraft.select(photo(), source: .frontCamera)
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.windowLevel = .alert + 1
+        defer { window.isHidden = true }
+        for size in [CGSize(width: 834, height: 1194), CGSize(width: 1194, height: 834)] {
+            for conversation in [false, true] {
+                let content = conversation ? AnyView(TranscriptView()) : AnyView(PresenceStageView())
+                let host = UIHostingController(rootView: content.environment(model).preferredColorScheme(.dark))
+                window.frame = CGRect(origin: .zero, size: size)
+                window.rootViewController = host
+                host.view.frame = window.bounds
+                window.makeKeyAndVisible()
+                try await Task.sleep(for: .milliseconds(200))
+                window.layoutIfNeeded(); host.view.layoutIfNeeded()
+                let image = UIGraphicsImageRenderer(bounds: host.view.bounds).image { _ in
+                    XCTAssertTrue(host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true))
+                }
+                let attachment = XCTAttachment(image: image)
+                attachment.name = "Look-attached-\(conversation ? "conversation" : "presence")-\(Int(size.width))"
+                attachment.lifetime = .keepAlways
+                add(attachment)
+                XCTAssertNotNil(model.imageDraft.photo, "Navigation must preserve the local photo")
+                XCTAssertEqual(model.conversation.draft, "What do you notice in this photo?")
+            }
+        }
     }
 
 }
