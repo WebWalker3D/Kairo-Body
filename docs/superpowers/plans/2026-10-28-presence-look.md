@@ -26,10 +26,18 @@ Work on main per AGENTS.md. Preserve bundle and storage identifiers, pairing, pe
 
 Files: new SharedImageDraft.swift and SharedCameraSession.swift; LookTogetherView.swift; BodyClient.swift; ConversationClient.swift; AppModel.swift; PresenceStageView.swift; TranscriptView.swift; RootShellView.swift; PresenceWorkspace.swift; Tests/PresenceLookTests.swift; UITests/PresenceJourneyTests.swift.
 
-- [ ] Add a UI regression for opening Look from Presence without losing the composer draft and returning via Cancel. Run CI and confirm the missing camera action fails.
-- [ ] Add transport-boundary tests for local-only selection, sending vision and question in one session, upload failure retention, and durable pending attachment recovery.
-- [ ] Implement a local SharedImageDraft with identity-checked removal and immutable photo snapshots.
-- [ ] Implement serialized front camera start/capture/stop, live preview, review/retake/attach and photo-picker review. Reserve BodyClient camera access while preview runs; stop on dismissal/background.
-- [ ] Add shared attachment controls to both composers; replace Look's separate question/reply with the capture sheet. Send uploads the snapshot through existing uploadVisual and PendingTurn machinery.
+- [x] Add a UI regression for opening Look from Presence without losing the composer draft and returning via Cancel. Run CI and confirm the missing camera action fails.
+- [x] Add transport-boundary tests for local-only selection, sending vision and question in one session, upload failure retention, and durable pending attachment recovery.
+- [x] Implement a local SharedImageDraft with identity-checked removal and immutable photo snapshots.
+- [x] Implement serialized front camera start/capture/stop, live preview, review/retake/attach and photo-picker review. Reserve BodyClient camera access while preview runs; stop on dismissal/background.
+- [x] Add shared attachment controls to both composers; replace Look's separate question/reply with the capture sheet. Send uploads the snapshot through existing uploadVisual and PendingTurn machinery.
 - [ ] Run full simulator suite and unsigned device build in GitHub Actions; inspect portrait/landscape screenshot evidence. Update README with actual behavior and hardware limits.
 - [ ] Review the full diff and fix material findings; report verified CI and remaining real-device checks.
+
+## Evidence and implementation decisions
+
+- Baseline run 40702070133: all 193 existing unit tests and existing navigation test passed; new Presence camera entry test failed at the missing camera action, as intended.
+- Independent review found permission-alert dismissal and delayed motion-start races. Fixed by separating background from inactivity, using a single camera lifecycle task, and invalidating motion startup tickets. Review confirmed the fixes by static inspection.
+- Review is shown after camera stop completes, so Retake cannot race the previous capture teardown.
+- Local images are in memory only. The existing PendingTurn store persists the description attachment after Send, retaining existing recovery behavior.
+- Simulator/device CI and screenshot inspection are the completion gate. Hardware preview, exposure and camera permission acceptance require the physical iPad.

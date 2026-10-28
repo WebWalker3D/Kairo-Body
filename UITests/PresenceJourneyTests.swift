@@ -87,6 +87,11 @@ final class PresenceJourneyTests: XCTestCase {
         XCUIDevice.shared.orientation = .landscapeLeft
         capture("Presence-look-sheet-landscape")
         app.buttons["Front camera"].tap()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let allow = springboard.alerts.buttons["Allow"]
+        if allow.waitForExistence(timeout: 5) { allow.tap() }
+        // Granting camera permission must leave the sharing sheet open.
+        XCTAssertTrue(app.navigationBars["Look together"].waitForExistence(timeout: 5))
         // The simulator has no front camera; it must show a recoverable error.
         XCTAssertTrue(app.buttons["Try camera again"].waitForExistence(timeout: 10))
         capture("Presence-camera-unavailable")

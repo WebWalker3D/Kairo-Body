@@ -309,6 +309,9 @@ final class BodyClient {
                   self.isForeground, self.shouldRun else { return }
             let ticket = self.frontMotion.startTicket()
             let started = await self.frontMotion.start(ticket: ticket)
+            // A suspended startup must not stop or report failure for a newer
+            // motion session after the sharing viewfinder releases ownership.
+            guard self.frontMotion.startTicket() == ticket else { return }
             if !self.shouldRun || !self.isForeground || self.frontMotionSuspended ||
                 !(self.settings.dimWhenStill || self.settings.cameraMode) {
                 await self.frontMotion.stop()
