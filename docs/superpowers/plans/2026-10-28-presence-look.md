@@ -31,8 +31,8 @@ Files: new SharedImageDraft.swift and SharedCameraSession.swift; LookTogetherVie
 - [x] Implement a local SharedImageDraft with identity-checked removal and immutable photo snapshots.
 - [x] Implement serialized front camera start/capture/stop, live preview, review/retake/attach and photo-picker review. Reserve BodyClient camera access while preview runs; stop on dismissal/background.
 - [x] Add shared attachment controls to both composers; replace Look's separate question/reply with the capture sheet. Send uploads the snapshot through existing uploadVisual and PendingTurn machinery.
-- [ ] Run full simulator suite and unsigned device build in GitHub Actions; inspect portrait/landscape screenshot evidence. Update README with actual behavior and hardware limits.
-- [ ] Review the full diff and fix material findings; report verified CI and remaining real-device checks.
+- [x] Run full simulator suite and unsigned device build in GitHub Actions; inspect portrait/landscape screenshot evidence. Update README with actual behavior and hardware limits.
+- [x] Review the full diff and fix material findings; report verified CI and remaining real-device checks.
 
 ## Evidence and implementation decisions
 
@@ -41,3 +41,11 @@ Files: new SharedImageDraft.swift and SharedCameraSession.swift; LookTogetherVie
 - Review is shown after camera stop completes, so Retake cannot race the previous capture teardown.
 - Local images are in memory only. The existing PendingTurn store persists the description attachment after Send, retaining existing recovery behavior.
 - Simulator/device CI and screenshot inspection are the completion gate. Hardware preview, exposure and camera permission acceptance require the physical iPad.
+
+## Completion evidence
+
+Final code commit: `3d34eaa`. GitHub Actions run [40707396794](https://github.com/WebWalker3D/Kairo-Body/actions/runs/40707396794) succeeded: 200 unit tests and 2 UI tests, unsigned device build, and packaged version/provisioning guard. Package: `icu.kairo.body` 3.4.0, build 63.
+
+The first implementation run passed all 200 unit tests; the UI journey initially waited behind the OS permission alert. The corrected test explicitly grants permission, verifies Look remains open, checks unavailable-camera recovery on the simulator, and confirms Cancel preserves the draft. It passed in the final run.
+
+Inspected exported portrait/landscape sharing-sheet and attached-photo composer screenshots, plus the final camera-unavailable screen. Physical camera preview/exposure/rotation and motion resumption still require iPad acceptance; no hardware result is claimed.
