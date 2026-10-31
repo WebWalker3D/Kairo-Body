@@ -889,8 +889,14 @@ final class SessionBoundSocket: BodySocket {
     func receive() async throws -> URLSessionWebSocketTask.Message { try await task.receive() }
 
     func sendPing() async throws {
+        try await Self.ping { completion in task.sendPing(pongReceiveHandler: completion) }
+    }
+
+    /// Bridge the URLSession callback separately so duplicate and late callbacks
+    /// can be exercised without depending on a real network race.
+    static func ping(register: (@escaping @Sendable (Error?) -> Void) -> Void) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            task.sendPing { error in
+            register { error in
                 if let error { continuation.resume(throwing: error) }
                 else { continuation.resume(returning: ()) }
             }
