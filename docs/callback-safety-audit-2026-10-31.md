@@ -47,7 +47,19 @@ not a claim that another physical-device crash was observed.
   execution and no-callback ping cancellation. Its 20 tests produced three
   assertions from those two remaining defects.
 
-Final release verification is recorded separately after Actions completes.
+Final source **cd54c9c**, version **3.5.1/build 65**:
+
+- [Full release qualification](https://github.com/WebWalker3D/Kairo-Body/actions/runs/41215055159):
+  **219 unit tests and 2 UI tests passed**, visual smoke checks passed, unsigned
+  device build and packaged version/permission/provisioning assertions passed.
+- [Focused safety verification](https://github.com/WebWalker3D/Kairo-Body/actions/runs/41215069809):
+  **20 tests passed**, including no-callback cancellation and late concurrent
+  callbacks, on the same source commit.
+- Downloaded IPA ZIP integrity and Info.plist were verified locally; its SHA-256
+  is `868e2e553d086b3e55095681c98f35d54c113a2a2b3291d9f21b259c46bc2aea`.
+
+This is a qualified replacement IPA, not proof of installation or a completed
+physical-device overnight acceptance run.
 The manual callback-safety workflow supplements the release workflow; it does
 not build an IPA or certify UI/device behavior.
 
