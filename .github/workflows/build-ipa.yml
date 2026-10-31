@@ -136,8 +136,8 @@ jobs:
           with ZipFile('KairoBody.ipa') as archive:
               info = plistlib.loads(archive.read('Payload/KairoBody.app/Info.plist'))
           assert info['CFBundleIdentifier'] == 'icu.kairo.body'
-          assert info['CFBundleVersion'] == '64'
-          assert info['CFBundleShortVersionString'] == '3.5.0'
+          assert info['CFBundleVersion'] == '65'
+          assert info['CFBundleShortVersionString'] == '3.5.1'
           assert info['CFBundleIcons']['CFBundlePrimaryIcon']['CFBundleIconFiles']
           assert 'Payload/KairoBody.app/Assets.car' in archive.namelist()
           assert info['NSCameraUsageDescription']

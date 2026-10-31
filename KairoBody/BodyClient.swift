@@ -632,7 +632,13 @@ final class BodyClient {
         } catch { handleDisconnect(error, transport: transport) }
     }
 
+    private func commandIsCurrent(_ transport: UUID) -> Bool {
+        shouldRun && gate.isCurrent(transport) && !Task.isCancelled
+    }
+
     private func handleIncoming(_ data: Data) async {
+        let run = transportGeneration
+        guard commandIsCurrent(run) else { return }
         if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            object["bodyID"] as? String == AppConfig.bodyID, object["sessionID"] as? String == sessionID {
             if object["type"] as? String == "hello_ack",
@@ -682,14 +688,19 @@ final class BodyClient {
             }
             if let accepted = actionLifecycle.lastEvent(commandID: commandID) { await sendActionEvent(accepted) }
         }
+        // Sending an action event can suspend through a disconnect or stop.
+        // The command still belongs to its original transport after that await.
+        guard commandIsCurrent(run) else { return }
         switch command {
         case "speak":
             let text = args["text"] as? String ?? ""
             guard isForeground else { await commandResult(id: commandID, ok: false, detail: "app background"); return }
-            let run = transportGeneration
             let accepted = speech.speak(text, onEvent: { [weak self] phase, detail in
-                guard let self, self.transportGeneration == run else { return }
-                Task { await self.actionEvent(id: commandID, phase: phase, detail: detail) }
+                guard let self else { return }
+                Task {
+                    guard self.commandIsCurrent(run) else { return }
+                    await self.actionEvent(id: commandID, phase: phase, detail: detail)
+                }
             })
             if !accepted { await commandResult(id: commandID, ok: false, detail: "voice unavailable") }
             else if !actionEventsNegotiated {
@@ -698,12 +709,14 @@ final class BodyClient {
 
         case "stop_speaking":
             await actionEvent(id: commandID, phase: .started, detail: "stopping speech")
+            guard commandIsCurrent(run) else { return }
             speech.stop()
             await commandResult(id: commandID, ok: true, detail: "speech stopped")
 
         case "display":
             guard isForeground, displayVisible, !screensaverActive else { await commandResult(id: commandID, ok: false, detail: "body display is not visible"); return }
             await actionEvent(id: commandID, phase: .started, detail: "applying visible display")
+            guard commandIsCurrent(run) else { return }
             guard isForeground, displayVisible, !screensaverActive else { await commandResult(id: commandID, ok: false, detail: "body display became obscured"); return }
             let state = String((args["state"] as? String ?? "present").prefix(64))
             let headline = String((args["headline"] as? String ?? "Kairo").prefix(160))
@@ -719,6 +732,7 @@ final class BodyClient {
                 }
             }
             let applied = await applyDisplay(display)
+            guard commandIsCurrent(run) else { return }
             let visible = applied && isForeground && displayVisible && !screensaverActive
             await commandResult(id: commandID, ok: visible, detail: visible ? "display updated visibly" : "body display did not acknowledge visible output")
 
@@ -733,11 +747,11 @@ final class BodyClient {
                 await commandResult(id: commandID, ok: false, detail: "front camera only; foreground and idle camera required")
                 return
             }
-            let run = transportGeneration
             actionTasks[commandID] = Task { [weak self] in
-                guard let self else { return }
+                guard let self, self.commandIsCurrent(run) else { return }
                 await self.actionEvent(id: commandID, phase: .started, detail: "front camera capture started")
-                await self.captureAndSendCamera(position: position, commandID: commandID)
+                guard self.commandIsCurrent(run) else { return }
+                await self.captureAndSendCamera(position: position, commandID: commandID, transport: run)
                 if self.transportGeneration == run { self.actionTasks.removeValue(forKey: commandID) }
             }
 
@@ -747,12 +761,13 @@ final class BodyClient {
                 await commandResult(id: commandID, ok: false, detail: "location disabled, denied, or background")
                 return
             }
-            let run = transportGeneration
             actionTasks[commandID] = Task { [weak self] in
-                guard let self else { return }
+                guard let self, self.commandIsCurrent(run) else { return }
                 do {
                     await self.actionEvent(id: commandID, phase: .started, detail: "location refresh started")
+                    guard self.commandIsCurrent(run) else { return }
                     let fix = try await self.sensors.locationAttention.refresh()
+                    guard self.commandIsCurrent(run) else { return }
                     self.locationDeliveryPending = true
                     defer { self.locationDeliveryPending = false }
                     // Preserve normal sensor-ingest cadence rather than bypassing its admission limit.
@@ -762,7 +777,7 @@ final class BodyClient {
                     }
                     try Task.checkCancellation()
                     guard self.isForeground, self.settings.sendLocation,
-                          self.transportGeneration == run else { throw ObservationDelivery.Failure.cancelled }
+                          self.commandIsCurrent(run) else { throw ObservationDelivery.Failure.cancelled }
                     self.lastFrameSentAt = Date()
                     self.sequence += 1
                     var frame = self.sensors.snapshot(bodyID: AppConfig.bodyID, sessionID: self.sessionID,
@@ -771,12 +786,13 @@ final class BodyClient {
                     let observation = try await self.observationDelivery.deliver(sequence: frame.sequence, timeout: .seconds(10)) {
                         await self.sendCodable(frame)
                     }
+                    guard self.commandIsCurrent(run) else { return }
                     self.lastSensorFrame = frame
                     self.lastFrameAt = Date()
                     await self.commandResult(id: commandID, ok: true,
                         detail: "Location observed \(fix.observedAt ?? "unknown"); accuracy \(fix.horizontalAccuracyM ?? -1)m; observation \(observation)")
                 } catch {
-                    if self.transportGeneration == run {
+                    if self.commandIsCurrent(run) {
                         await self.commandResult(id: commandID, ok: false, detail: error.localizedDescription)
                     }
                 }
@@ -791,26 +807,31 @@ final class BodyClient {
         }
     }
 
-    private func captureAndSendCamera(position: AVCaptureDevice.Position, commandID: String?) async {
+    private func captureAndSendCamera(position: AVCaptureDevice.Position, commandID: String?, transport run: UUID) async {
+        guard commandIsCurrent(run) else { return }
         guard position == .front, !cameraBusy, isForeground else {
             if let commandID { await commandResult(id: commandID, ok: false, detail: "front camera unavailable") }
             return
         }
         cameraBusy = true
-        let run = transportGeneration
         await suspendFrontMotion()
         defer { cameraBusy = false; resumeFrontMotion() }
         do {
+            guard commandIsCurrent(run), isForeground, settings.allowRemoteCamera else {
+                throw ObservationDelivery.Failure.cancelled
+            }
             let (jpeg, width, height) = try await (position == .front
                 ? camera.captureQuietFront() : camera.capture(position: position))
             try Task.checkCancellation()
-            guard isForeground, settings.allowRemoteCamera, transportGeneration == run else { throw ObservationDelivery.Failure.cancelled }
+            guard isForeground, settings.allowRemoteCamera, commandIsCurrent(run) else { throw ObservationDelivery.Failure.cancelled }
             let observation = try await sendCameraFrame(jpeg: jpeg, width: width, height: height,
                                           position: position, commandID: commandID)
+            guard commandIsCurrent(run) else { return }
             if let commandID { await commandResult(id: commandID, ok: true, detail: "Camera observation ingested: \(observation)") }
         } catch {
+            guard commandIsCurrent(run) else { return }
             lastError = error.localizedDescription
-            if let commandID, transportGeneration == run { await commandResult(id: commandID, ok: false, detail: error.localizedDescription) }
+            if let commandID { await commandResult(id: commandID, ok: false, detail: error.localizedDescription) }
         }
     }
 
@@ -898,9 +919,16 @@ final class SessionBoundSocket: BodySocket {
     /// Bridge the URLSession callback separately so duplicate and late callbacks
     /// can be exercised without depending on a real network race.
     static func ping(register: (@escaping @Sendable (Error?) -> Void) -> Void) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            let completion = PingCompletion(continuation)
-            register { error in completion.finish(error) }
+        let completion = PingCompletion()
+        try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                if completion.install(continuation) {
+                    register { error in completion.finish(error) }
+                }
+            }
+        } onCancel: {
+            completion.finish(CancellationError())
         }
     }
 
@@ -917,18 +945,31 @@ final class SessionBoundSocket: BodySocket {
 private final class PingCompletion: @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: CheckedContinuation<Void, Error>?
+    private var result: Result<Void, Error>?
 
-    init(_ continuation: CheckedContinuation<Void, Error>) {
+    /// Cancellation may arrive before the continuation is installed. Remember
+    /// its outcome and complete immediately without registering a native ping.
+    func install(_ continuation: CheckedContinuation<Void, Error>) -> Bool {
+        lock.lock()
+        if let result {
+            lock.unlock()
+            continuation.resume(with: result)
+            return false
+        }
         self.continuation = continuation
+        lock.unlock()
+        return true
     }
 
     func finish(_ error: Error?) {
         lock.lock()
+        guard result == nil else { lock.unlock(); return }
+        let outcome: Result<Void, Error> = error.map { .failure($0) } ?? .success(())
+        result = outcome
         let pending = continuation
         continuation = nil
         lock.unlock()
-        if let error { pending?.resume(throwing: error) }
-        else { pending?.resume(returning: ()) }
+        pending?.resume(with: outcome)
     }
 }
 

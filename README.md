@@ -5,7 +5,7 @@ Kairo's iPad body endpoint: a dependency-free iPadOS 17 SwiftUI + Metal app
 `icu.kairo.body`. This public repository is the source of record for the
 installed body app; the server lives in the private novexai repository.
 
-Kairo Body 3.5 (v3.5.0, build 64) replaces the 1.0.x MVP line in place: same
+Kairo Body 3.5.1 (v3.5.1, build 65) replaces the 1.0.x MVP line in place: same
 bundle id, same Keychain service/accounts (`icu.kairo.body` bearer-token /
 agent-token, `icu.kairo.body.owner` paired-owner-proof), same UserDefaults
 identity (`echoSessionID` and friends), endpoint id `ipad-pro-2017`. A
@@ -76,7 +76,7 @@ Dot's endpoint id (`echomuse-rs03qr`) is a fixed deployment constant in
 
 GitHub Actions (`build-ipa.yml`) runs the unit suite on an iPad simulator,
 captures visual smoke screenshots, builds the unsigned device app, asserts
-bundle id, version 3.5.0/build 64, permission strings and that no personal
+bundle id, version 3.5.1/build 65, permission strings and that no personal
 provisioning was baked, then uploads `KairoBody.ipa`.
 
 On a Mac directly:
@@ -270,3 +270,22 @@ buffer drain; local iPad playback begins at player start and outranks unrelated
 work. Lease loss stops the claim of speech. Relay cadence and network latency mean
 Dot mirroring is not sample-accurate lip synchronization. Real iPad/Dot acceptance
 still requires installation and listening through a full reply.
+
+
+## 3.5.1 — Callback and cancellation safety
+
+The sensory WebSocket ping now completes once even if its native callback fires
+again during teardown, and cancellation releases its waiter without requiring a
+callback. This repairs the Swift continuation assertion identified in device
+crash reports. Observation receipts isolate reused sequences by local attempt;
+stopped speech cannot start synthesis; body commands recheck their original
+transport after awaited action events and before actuator work. Unavailable
+microphone formats are rejected before tap installation, with recording-session
+cleanup on early failure.
+
+Regression tests reproduce the original callback crash and the related lifecycle
+failures. The manual **Callback safety regressions** Actions workflow runs these
+boundaries quickly; release qualification still requires the full existing
+unit/UI workflow and device packaging. See [the audit](docs/callback-safety-audit-2026-10-31.md)
+for evidence and limits. Install over the existing app with the same SideStore
+signing identity; physical long-duration acceptance remains separate from CI.
