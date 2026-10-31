@@ -516,7 +516,7 @@ final class BodyClient {
                 }
                 guard gate.isCurrent(transport), !Task.isCancelled else { return }
                 linkActivity.note()
-                await handleIncoming(data)
+                await handleIncoming(data, transport: transport)
             } catch {
                 handleDisconnect(error, transport: transport)
                 return
@@ -636,8 +636,7 @@ final class BodyClient {
         shouldRun && gate.isCurrent(transport) && !Task.isCancelled
     }
 
-    private func handleIncoming(_ data: Data) async {
-        let run = transportGeneration
+    private func handleIncoming(_ data: Data, transport run: UUID) async {
         guard commandIsCurrent(run) else { return }
         if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            object["bodyID"] as? String == AppConfig.bodyID, object["sessionID"] as? String == sessionID {
