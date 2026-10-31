@@ -178,10 +178,12 @@ final class VoiceInputService {
             let format = input.outputFormat(forBus: 0)
             audioRelay.replace(with: next)
             let relay = audioRelay
-            input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-                if let level = relay.append(buffer) {
-                    Task { @MainActor [weak self] in
-                        self?.noteAudioLevel(level, generation: run)
+            try MicrophoneInput.installTap(sampleRate: format.sampleRate, channelCount: format.channelCount) {
+                input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+                    if let level = relay.append(buffer) {
+                        Task { @MainActor [weak self] in
+                            self?.noteAudioLevel(level, generation: run)
+                        }
                     }
                 }
             }
