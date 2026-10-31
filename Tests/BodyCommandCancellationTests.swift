@@ -4,11 +4,6 @@ import XCTest
 @MainActor
 final class BodyCommandCancellationTests: XCTestCase {
     func testStopWhileAcceptedEventIsSendingDoesNotApplyDisplayCommand() async throws {
-        let previousToken = AppConfig.sensoryToken
-        AppConfig.sensoryToken = "body-command-cancellation-fixture"
-        defer { AppConfig.sensoryToken = previousToken }
-        XCTAssertFalse(AppConfig.sensoryToken.isEmpty)
-
         let suite = "BodyCommandCancellationTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -24,7 +19,8 @@ final class BodyCommandCancellationTests: XCTestCase {
         let socket = SuspendedAcceptedEventSocket(accepted: accepted)
         let body = BodyClient(settings: settings, sensors: SensorManager(),
                               speech: SpeechService(), camera: CameraCaptureService(),
-                              makeSocket: { _ in socket })
+                              makeSocket: { _ in socket },
+                              sensoryToken: { "body-command-cancellation-fixture" })
         defer { body.stop(); socket.releaseAcceptedEvent() }
         body.setDisplayVisible(true)
         body.applyDisplay = { _ in applied.fulfill(); return true }

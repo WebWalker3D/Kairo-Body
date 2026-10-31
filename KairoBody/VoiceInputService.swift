@@ -62,6 +62,7 @@ final class VoiceInputService {
     private var generation = 0
     private var listeningSince: TimeInterval = 0
     private var tapInstalled = false
+    private var audioSessionActivated = false
     private var continuationPrefix: String?
     private var wakeWordTime: TimeInterval?
     private var recognitionFailures = 0
@@ -174,6 +175,7 @@ final class VoiceInputService {
             let audio = AVAudioSession.sharedInstance()
             try audio.setCategory(.record, mode: .measurement)
             try audio.setActive(true)
+            audioSessionActivated = true
             let input = engine.inputNode
             let format = input.outputFormat(forBus: 0)
             audioRelay.replace(with: next)
@@ -334,7 +336,8 @@ final class VoiceInputService {
     }
 
     private func stopListening(preservingCapture: Bool = false) {
-        let hadAudio = engine.isRunning || tapInstalled || recognition != nil
+        let hadAudio = audioSessionActivated || engine.isRunning || tapInstalled || recognition != nil
+        audioSessionActivated = false
         generation += 1
         recognitionGeneration += 1
         clockTask?.cancel(); clockTask = nil

@@ -68,6 +68,7 @@ final class BodyClient {
 
     private var socket: BodySocket?
     private let makeSocket: (URLRequest) -> BodySocket
+    private let sensoryToken: () -> String
     private let timing: BodyLinkTiming
     private var frameTask: Task<Void, Never>?
     private var receiveTask: Task<Void, Never>?
@@ -102,8 +103,10 @@ final class BodyClient {
     init(settings: AppSettings, sensors: SensorManager, speech: SpeechService,
          camera: CameraCaptureService,
          makeSocket: @escaping (URLRequest) -> BodySocket = SessionBoundSocket.open,
-         timing: BodyLinkTiming = BodyLinkTiming()) {
+         timing: BodyLinkTiming = BodyLinkTiming(),
+         sensoryToken: @escaping () -> String = { AppConfig.sensoryToken }) {
         self.makeSocket = makeSocket
+        self.sensoryToken = sensoryToken
         self.timing = timing
         self.settings = settings
         self.sensors = sensors
@@ -122,7 +125,7 @@ final class BodyClient {
 
     func start() {
         guard !shouldRun else { return }
-        guard URL(string: AppConfig.bodySocketURL) != nil, !AppConfig.sensoryToken.isEmpty else {
+        guard URL(string: AppConfig.bodySocketURL) != nil, !sensoryToken().isEmpty else {
             lastError = "This copy of Kairo was not provisioned with body credentials."
             connectionState = .error
             return
@@ -454,8 +457,8 @@ final class BodyClient {
         connectionState = reconnectAttempt == 0 ? .connecting : .reconnecting
         var request = URLRequest(url: url)
         request.timeoutInterval = 15
-        if !AppConfig.sensoryToken.isEmpty {
-            request.setValue("Bearer \(AppConfig.sensoryToken)", forHTTPHeaderField: "Authorization")
+        if !sensoryToken().isEmpty {
+            request.setValue("Bearer \(sensoryToken())", forHTTPHeaderField: "Authorization")
         }
 
         let socket = makeSocket(request)

@@ -62,6 +62,10 @@ final class SpeechService {
                 }
             }
             do {
+                // A same-turn stop can cancel this task before it first runs.
+                // Do not activate audio or spawn synthesis for an obsolete run.
+                try Task.checkCancellation()
+                guard runGeneration == self.generation else { throw CancellationError() }
                 try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio,
                                                                  options: [.duckOthers])
                 try AVAudioSession.sharedInstance().setActive(true)
