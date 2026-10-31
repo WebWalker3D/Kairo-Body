@@ -896,16 +896,36 @@ final class SessionBoundSocket: BodySocket {
     /// can be exercised without depending on a real network race.
     static func ping(register: (@escaping @Sendable (Error?) -> Void) -> Void) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            register { error in
-                if let error { continuation.resume(throwing: error) }
-                else { continuation.resume(returning: ()) }
-            }
+            let completion = PingCompletion(continuation)
+            register { error in completion.finish(error) }
         }
     }
 
     func cancel(with closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
         task.cancel(with: closeCode, reason: reason)
         session.invalidateAndCancel()
+    }
+}
+
+/// URLSession may deliver a late error after a pong during transport teardown.
+/// Consume the continuation under a lock before resuming, including when those
+/// callbacks arrive concurrently. The outer liveness guard cannot protect this
+/// inner continuation from a second resume.
+private final class PingCompletion: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Void, Error>?
+
+    init(_ continuation: CheckedContinuation<Void, Error>) {
+        self.continuation = continuation
+    }
+
+    func finish(_ error: Error?) {
+        lock.lock()
+        let pending = continuation
+        continuation = nil
+        lock.unlock()
+        if let error { pending?.resume(throwing: error) }
+        else { pending?.resume(returning: ()) }
     }
 }
 
